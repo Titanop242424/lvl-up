@@ -488,13 +488,105 @@ async def handle_index(request: web.Request) -> web.Response:
 
 
 async def handle_get_stats(request: web.Request) -> web.Response:
-    accounts_data = list(bot_state.accounts.values())
-    accounts_data.sort(key=lambda x: x.get("gained_exp", 0), reverse=True)
+    # 1. Load accounts.json — the source of truth for "added accounts"
+    added_accounts = []
+    try:
+        if os.path.exists(ACCOUNTS_FILE):
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                added_accounts = json.load(f)
+            if not isinstance(added_accounts, list):
+                added_accounts = []
+    except Exception:
+        added_accounts = []
+
+    # 2. Runtime state from bot_state
+    runtime = list(bot_state.accounts.values())
+    runtime_by_uid = {str(a["uid"]): a for a in runtime}
+
+    # 3. Build merged list
+    merged: List[Dict[str, Any]] = []
+    seen_uids = set()
+
+    # First: every added account from accounts.json
+    for acc in added_accounts:
+        # Skip accounts marked deleted
+        raw_uid = str(acc.get("uid", "")).strip()
+        raw_token = acc.get("token", "")
+        lookup_key = raw_uid if raw_uid else f"tok_{str(raw_token)[:20]}"
+
+        if lookup_key and lookup_key in bot_state.deleted_accounts:
+            continue
+
+        # Try to match runtime by uid OR by password/token match
+        runtime_acc = None
+        if raw_uid and raw_uid in runtime_by_uid:
+            runtime_acc = runtime_by_uid[raw_uid]
+        else:
+            # Try to find a runtime account whose auth_uid or auth_token matches
+            for rt in runtime:
+                rt_auth_uid = ""
+                creds = bot_state.account_credentials.get(str(rt["uid"]), {})
+                if isinstance(creds, dict):
+                    rt_auth_uid = str(creds.get("auth_uid", ""))
+                if raw_uid and rt_auth_uid == raw_uid:
+                    runtime_acc = rt
+                    break
+                if raw_token and isinstance(creds, dict):
+                    if creds.get("auth_token") == raw_token:
+                        runtime_acc = rt
+                        break
+
+        if runtime_acc:
+            merged.append(runtime_acc)
+            seen_uids.add(str(runtime_acc["uid"]))
+        else:
+            # Not logged in yet → PENDING placeholder from accounts.json
+            placeholder_uid = raw_uid or f"pending_{lookup_key}"
+            if placeholder_uid in bot_state.deleted_accounts:
+                continue
+            status = "CONNECTING"
+            # If it was explicitly added but never registered, mark as PENDING
+            if raw_uid and raw_uid in bot_state.paused_accounts:
+                status = "PAUSED"
+            merged.append({
+                "uid": placeholder_uid,
+                "nickname": f"Pending_{placeholder_uid[:6]}" if placeholder_uid else "Pending",
+                "region": "BD",
+                "level": 1,
+                "initial_exp": 0,
+                "current_exp": 0,
+                "gained_exp": 0,
+                "likes": 0,
+                "status": status,
+                "matches_played": 0,
+                "active_matches": 0,
+                "last_match_time": None,
+                "last_match_timestamp": time.time(),
+                "connected_at": time.time(),
+                "last_updated": time.strftime("%H:%M:%S"),
+                "_pending": True,
+                "_source_uid": raw_uid,
+                "_source_token": raw_token[:10] + "..." if raw_token else "",
+            })
+            seen_uids.add(placeholder_uid)
+
+    # Then: any runtime accounts not sourced from accounts.json (edge case)
+    for rt in runtime:
+        if str(rt["uid"]) not in seen_uids:
+            merged.append(rt)
+
+    # Sort: pending/connecting first, then by gained exp
+    def sort_key(a):
+        order = {"CONNECTING": 0, "PENDING": 1, "SEARCHING": 2, "ONLINE": 3, "IN_MATCH": 4,
+                 "PAUSED": 5, "ERROR": 6, "OFFLINE": 7}
+        return (order.get(a.get("status", "ONLINE"), 9), -a.get("gained_exp", 0))
+    merged.sort(key=sort_key)
+
     return web.json_response({
-        "total_accounts": len(bot_state.accounts),
+        "total_accounts": len(merged),
         "total_matches": bot_state.total_matches,
         "total_gained_exp": bot_state.total_gained_exp,
-        "accounts": accounts_data,
+        "accounts": merged,
         "logs": bot_state.logs[-100:],
         "uptime": int(time.time() - bot_state.start_time)
     })
