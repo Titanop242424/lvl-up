@@ -421,7 +421,8 @@
             flex-shrink: 0;
         }
 
-        .status-online { background: rgba(0, 255, 136, 0.12); color: var(--accent-green); border: 1px solid rgba(0, 255, 136, 0.25); }
+        .status-connecting { background: rgba(0, 242, 254, 0.12); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.3); }
+        .status-pending { background: rgba(168, 85, 247, 0.12); color: var(--accent-purple); border: 1px solid rgba(168, 85, 247, 0.3); }
         .status-match { background: rgba(0, 242, 254, 0.15); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.4); }
         .status-searching { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); border: 1px solid rgba(168, 85, 247, 0.4); }
         .status-paused { background: rgba(255, 170, 0, 0.15); color: var(--accent-amber); border: 1px solid rgba(255, 170, 0, 0.4); }
@@ -1166,6 +1167,8 @@
             if (status === 'SEARCHING') return 'status-searching';
             if (status === 'PAUSED') return 'status-paused';
             if (status === 'ERROR') return 'status-error';
+            if (status === 'CONNECTING') return 'status-connecting';
+            if (status === 'PENDING') return 'status-pending';
             if (status === 'ONLINE') return 'status-online';
             return 'status-online';
         }
@@ -1178,22 +1181,23 @@
 
         function renderLiveAccounts() {
             const container = document.getElementById('accounts-container');
-            const live = allAccounts.filter(a => 
-                a.status !== 'PAUSED' && a.status !== 'OFFLINE' && a.status !== 'ERROR'
+            const live = allAccounts.filter(a =>
+                !['PAUSED', 'OFFLINE', 'ERROR'].includes(a.status)
             );
-            
+
             document.getElementById('live-count-label').innerText = live.length + ' running';
-            
+
             if (live.length === 0) {
                 container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-ghost"></i><p>No live accounts. Add or resume from management below.</p></div>';
                 return;
             }
-            
+
             container.innerHTML = live.map(acc => {
                 const gainedExp = acc.gained_exp || 0;
                 const statusClass = getStatusClass(acc.status);
-                const statusText = getStatusText(acc);
-                
+                const isPending = acc._pending === true || acc.status === 'CONNECTING';
+                const statusText = isPending ? 'Connecting...' : getStatusText(acc);
+
                 return `
                     <div class="account-card">
                         <div class="acc-top">
@@ -1225,18 +1229,20 @@
                         </div>
                         <div class="level-progress">
                             <div class="level-labels">
-                                <span style="color:var(--accent-cyan)">Level ${acc.level}</span>
-                                <span style="color:var(--text-muted)">Matches: ${acc.matches_played}</span>
+                                <span style="color:var(--accent-cyan)">Level ${acc.level || 1}</span>
+                                <span style="color:var(--text-muted)">Matches: ${acc.matches_played || 0}</span>
                             </div>
                             <div class="progress-bar-bg">
-                                <div class="progress-bar-fill" style="width: ${Math.min(100, Math.max(15, (acc.current_exp % 1000) / 10))}%"></div>
+                                <div class="progress-bar-fill" style="width: ${Math.min(100, Math.max(15, ((acc.current_exp || 0) % 1000) / 10))}%"></div>
                             </div>
                         </div>
                         <div class="acc-actions">
-                            <span>Last: ${acc.last_match_time || 'Running...'}</span>
+                            <span>Last: ${acc.last_match_time || (isPending ? 'Connecting...' : 'Running...')}</span>
                             <div class="action-btns">
                                 <button class="icon-btn" title="Refresh EXP" onclick="refreshAccountInfo('${acc.uid}')"><i class="fa-solid fa-rotate"></i></button>
-                                <button class="icon-btn warning" title="Pause" onclick="pauseAccount('${acc.uid}')"><i class="fa-solid fa-pause"></i></button>
+                                ${isPending ? '' :
+                                    `<button class="icon-btn warning" title="Pause" onclick="pauseAccount('${acc.uid}')"><i class="fa-solid fa-pause"></i></button>`
+                                }
                                 <button class="icon-btn danger" title="Delete" onclick="deleteAccount('${acc.uid}')"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
@@ -1248,52 +1254,63 @@
         function renderManagement() {
             const container = document.getElementById('mgmt-container');
             let filtered = allAccounts;
-            
+
             if (currentMgmtTab === 'active') {
-                filtered = allAccounts.filter(a => ['ONLINE','IN_MATCH','SEARCHING','CONNECTING'].includes(a.status));
+                filtered = allAccounts.filter(a =>
+                    ['ONLINE','IN_MATCH','SEARCHING','CONNECTING'].includes(a.status)
+                );
             } else if (currentMgmtTab === 'pending') {
-                filtered = allAccounts.filter(a => a.status === 'CONNECTING' || a.status === 'PENDING');
+                filtered = allAccounts.filter(a =>
+                    a.status === 'CONNECTING' || a.status === 'PENDING'
+                );
             } else if (currentMgmtTab === 'inactive') {
-                filtered = allAccounts.filter(a => ['PAUSED','ERROR','OFFLINE'].includes(a.status));
+                filtered = allAccounts.filter(a =>
+                    ['PAUSED','ERROR','OFFLINE'].includes(a.status)
+                );
             }
-            
+            // currentMgmtTab === 'all' → show EVERYTHING (no filter)
+
             const counts = {
                 all: allAccounts.length,
                 active: allAccounts.filter(a => ['ONLINE','IN_MATCH','SEARCHING','CONNECTING'].includes(a.status)).length,
                 pending: allAccounts.filter(a => a.status === 'CONNECTING' || a.status === 'PENDING').length,
                 inactive: allAccounts.filter(a => ['PAUSED','ERROR','OFFLINE'].includes(a.status)).length,
             };
-            
+
             document.getElementById('mgmt-active-count').innerText = counts.active;
             document.getElementById('mgmt-pending-count').innerText = counts.pending;
             document.getElementById('mgmt-inactive-count').innerText = counts.inactive;
             document.getElementById('mgmt-all-count').innerText = counts.all;
             document.getElementById('mgmt-total-count').innerText = counts.all + ' total';
-            
+
             if (filtered.length === 0) {
                 container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-inbox"></i><p>No ' + currentMgmtTab + ' accounts.</p></div>';
                 return;
             }
-            
+
             container.innerHTML = filtered.map(acc => {
                 const isPaused = acc.status === 'PAUSED';
+                const isPending = acc._pending === true || acc.status === 'CONNECTING' || acc.status === 'PENDING';
                 const statusClass = getStatusClass(acc.status);
+                const statusText = isPending ? 'Connecting...' : getStatusText(acc);
+                const region = acc.region || 'BD';
+
                 return `
                     <div class="mgmt-item">
                         <div class="mgmt-item-left">
                             <div class="mgmt-avatar"><i class="fa-solid fa-user"></i></div>
                             <div class="mgmt-item-info">
-                                <h5>${escapeHtml(acc.nickname)} <span class="region-badge">${acc.region || 'BD'}</span></h5>
-                                <span>UID: ${acc.uid} • Lvl ${acc.level} • +${(acc.gained_exp||0).toLocaleString()} EXP</span>
+                                <h5>${escapeHtml(acc.nickname)} <span class="region-badge">${region}</span></h5>
+                                <span>UID: ${acc.uid} • Lvl ${acc.level || 1} • +${(acc.gained_exp||0).toLocaleString()} EXP</span>
                             </div>
                         </div>
                         <div class="mgmt-item-right">
-                            <span class="acc-status ${statusClass}" style="font-size:9px;">${getStatusText(acc)}</span>
+                            <span class="acc-status ${statusClass}" style="font-size:9px;">${statusText}</span>
                             <button class="icon-btn" title="Refresh" onclick="refreshAccountInfo('${acc.uid}')"><i class="fa-solid fa-rotate"></i></button>
-                            ${isPaused ? 
+                            ${isPending ? '' : (isPaused ?
                                 `<button class="icon-btn success" title="Resume" onclick="resumeAccount('${acc.uid}')"><i class="fa-solid fa-play"></i></button>` :
                                 `<button class="icon-btn warning" title="Pause" onclick="pauseAccount('${acc.uid}')"><i class="fa-solid fa-pause"></i></button>`
-                            }
+                            )}
                             <button class="icon-btn danger" title="Delete" onclick="deleteAccount('${acc.uid}')"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
