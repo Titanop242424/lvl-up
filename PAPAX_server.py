@@ -16,6 +16,10 @@ TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
 STUCK_TIMEOUT = 300  # 5 minutes
 
+# Hook set by app.py at startup so PAPAX can force-clear the memoized cache
+# safely (avoids the app.py memo resurrecting deleted entries).
+EXTERNAL_CACHE_INVALIDATOR = None
+
 
 class BotState:
     def __init__(self):
@@ -74,8 +78,6 @@ class BotState:
                 ids.add(str(account_data["open_id"]))
             if account_data.get("auth_token"):
                 ids.add(f"tok_{str(account_data['auth_token'])[:20]}")
-            if account_data.get("auth_password"):
-                pass  # don't track password
         except Exception:
             pass
 
@@ -271,38 +273,42 @@ class BotState:
         except Exception as e:
             print(f"[DELETE] Error removing from accounts.json: {e}")
 
-        # 2. Remove from token_cache.json — match ANY known identifier
+        # 2. Remove from token_cache.json — use external invalidator hook if available
         try:
-            if os.path.exists(TOKEN_CACHE_FILE):
-                with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
-                    cache = json.load(f)
-                if not isinstance(cache, dict):
-                    cache = {}
-                deleted_keys = set()
-                # Direct key match
-                for k in all_ids:
-                    if k in cache:
-                        deleted_keys.add(k)
-                # Value-based match
-                for key, val in list(cache.items()):
-                    if not isinstance(val, dict):
-                        continue
-                    if str(val.get("account_id", "")).strip() in all_ids:
-                        deleted_keys.add(key)
-                    if str(val.get("auth_uid", "")).strip() in all_ids:
-                        deleted_keys.add(key)
-                    if str(val.get("open_id", "")).strip() in all_ids:
-                        deleted_keys.add(key)
-                    tok = val.get("auth_token")
-                    if tok and f"tok_{str(tok)[:20]}" in all_ids:
-                        deleted_keys.add(key)
-                for k in deleted_keys:
-                    cache.pop(k, None)
-                    removed_any = True
-                if deleted_keys:
-                    with open(TOKEN_CACHE_FILE, "w", encoding="utf-8") as f:
-                        json.dump(cache, f, indent=2)
-                    print(f"\033[93m[DELETE] Removed {len(deleted_keys)} keys from token_cache.json\033[0m")
+            if EXTERNAL_CACHE_INVALIDATOR is not None:
+                EXTERNAL_CACHE_INVALIDATOR(list(all_ids))
+                removed_any = True
+            else:
+                # Fallback: direct file edit (may be overwritten by app.py memo;
+                # see app.py's _save_token_cache which now merges safely)
+                if os.path.exists(TOKEN_CACHE_FILE):
+                    with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
+                        cache = json.load(f)
+                    if not isinstance(cache, dict):
+                        cache = {}
+                    deleted_keys = set()
+                    for k in all_ids:
+                        if k in cache:
+                            deleted_keys.add(k)
+                    for key, val in list(cache.items()):
+                        if not isinstance(val, dict):
+                            continue
+                        if str(val.get("account_id", "")).strip() in all_ids:
+                            deleted_keys.add(key)
+                        if str(val.get("auth_uid", "")).strip() in all_ids:
+                            deleted_keys.add(key)
+                        if str(val.get("open_id", "")).strip() in all_ids:
+                            deleted_keys.add(key)
+                        tok = val.get("auth_token")
+                        if tok and f"tok_{str(tok)[:20]}" in all_ids:
+                            deleted_keys.add(key)
+                    for k in deleted_keys:
+                        cache.pop(k, None)
+                        removed_any = True
+                    if deleted_keys:
+                        with open(TOKEN_CACHE_FILE, "w", encoding="utf-8") as f:
+                            json.dump(cache, f, indent=2)
+                        print(f"\033[93m[DELETE] Removed {len(deleted_keys)} keys from token_cache.json\033[0m")
         except Exception as e:
             print(f"[DELETE] Error removing from token_cache.json: {e}")
 
@@ -522,7 +528,6 @@ async def handle_get_stats(request: web.Request) -> web.Response:
         if raw_uid and raw_uid in runtime_by_uid:
             runtime_acc = runtime_by_uid[raw_uid]
         else:
-            # Try to find a runtime account whose auth_uid or auth_token matches
             for rt in runtime:
                 rt_auth_uid = ""
                 creds = bot_state.account_credentials.get(str(rt["uid"]), {})
@@ -540,12 +545,10 @@ async def handle_get_stats(request: web.Request) -> web.Response:
             merged.append(runtime_acc)
             seen_uids.add(str(runtime_acc["uid"]))
         else:
-            # Not logged in yet → PENDING placeholder from accounts.json
             placeholder_uid = raw_uid or f"pending_{lookup_key}"
             if placeholder_uid in bot_state.deleted_accounts:
                 continue
             status = "CONNECTING"
-            # If it was explicitly added but never registered, mark as PENDING
             if raw_uid and raw_uid in bot_state.paused_accounts:
                 status = "PAUSED"
             merged.append({
@@ -651,7 +654,32 @@ async def handle_delete_account(request: web.Request) -> web.Response:
                 if eid and str(eid).strip() != uid:
                     bot_state.deleted_accounts.add(str(eid).strip())
 
+        # Snapshot worker tasks so we can await their cancellation
+        pending_workers = list(bot_state.account_workers.values())
+
         bot_state.full_delete_account(uid)
+
+        # Give cancelled workers a moment to finish their cleanup paths so any
+        # in-flight cache_set() can't resurrect the entry after our delete.
+        if pending_workers:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*pending_workers, return_exceptions=True),
+                    timeout=3.0
+                )
+            except asyncio.TimeoutError:
+                pass
+            except Exception:
+                pass
+
+        # Re-run external cache invalidator AFTER workers settle to catch anything
+        # that might have slipped in during cancellation.
+        try:
+            if EXTERNAL_CACHE_INVALIDATOR is not None:
+                EXTERNAL_CACHE_INVALIDATOR([uid])
+        except Exception:
+            pass
+
         bot_state.log(
             f"Account {uid} permanently deleted from accounts.json + token_cache.json + devices.json.",
             "warning", uid, "system"
