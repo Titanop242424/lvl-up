@@ -400,9 +400,11 @@ async def _get_total_match_count() -> int:
 
 
 # ==================== TOKEN CACHE ====================
+# ---- FIXED: force-reload support + merge-on-save + external invalidator hook ----
 _token_cache_memo: Dict[str, Any] = {}
 _token_cache_memo_time: float = 0.0
 _TOKEN_CACHE_MEMO_TTL = 5.0
+_token_cache_lock = asyncio.Lock()
 
 def _json_serializer(obj):
     if isinstance(obj, (bytes, bytearray)):
@@ -419,18 +421,23 @@ def _json_deserializer(obj):
         return [_json_deserializer(x) for x in obj]
     return obj
 
-def _load_token_cache() -> Dict[str, Any]:
+def _load_token_cache(force: bool = False) -> Dict[str, Any]:
     global _token_cache_memo, _token_cache_memo_time
     now = time.time()
-    if _token_cache_memo and (now - _token_cache_memo_time) < _TOKEN_CACHE_MEMO_TTL:
+    if not force and _token_cache_memo and (now - _token_cache_memo_time) < _TOKEN_CACHE_MEMO_TTL:
         return _token_cache_memo
 
     if not os.path.exists(TOKEN_CACHE_FILE):
+        _token_cache_memo = {}
+        _token_cache_memo_time = now
         return {}
+
     try:
         with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip()
         if not content:
+            _token_cache_memo = {}
+            _token_cache_memo_time = now
             return {}
         data = json.loads(content)
         if not isinstance(data, dict):
@@ -443,16 +450,53 @@ def _load_token_cache() -> Dict[str, Any]:
         print_error(f"Token cache corrupt → deleting: {e}")
         try: os.remove(TOKEN_CACHE_FILE)
         except Exception: pass
+        _token_cache_memo = {}
+        _token_cache_memo_time = now
         return {}
 
 def _save_token_cache(cache: Dict[str, Any]):
+    """
+    Merge with on-disk state so external deletions (from PAPAX_server) are not
+    resurrected by our memoized in-memory copy.
+    """
     global _token_cache_memo, _token_cache_memo_time
     try:
+        # Read raw disk state (authoritative for deletions)
+        disk = {}
+        if os.path.exists(TOKEN_CACHE_FILE):
+            try:
+                with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
+                    raw = f.read().strip()
+                if raw:
+                    disk = _json_deserializer(json.loads(raw))
+                    if not isinstance(disk, dict):
+                        disk = {}
+            except Exception:
+                disk = {}
+
+        # Start from disk, then overlay our cache.
+        # Rule: any key present in our in-memory cache is kept ONLY if:
+        #   - it exists in disk already, OR
+        #   - it was cached very recently (fresh add this session, < 3s old)
+        # This preserves fresh writes while honoring external deletes.
+        merged = dict(disk)
+        now = time.time()
+        for k, v in cache.items():
+            if k in disk:
+                merged[k] = v
+            else:
+                # Not on disk: keep only if it's a fresh add (< 3s old)
+                if isinstance(v, dict):
+                    cached_at = v.get("cached_at", 0)
+                    if now - cached_at < 3.0:
+                        merged[k] = v
+                # else drop (was deleted externally)
+
         tmp_file = TOKEN_CACHE_FILE + ".tmp"
         with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(cache, f, indent=2, default=_json_serializer)
+            json.dump(merged, f, indent=2, default=_json_serializer)
         os.replace(tmp_file, TOKEN_CACHE_FILE)
-        _token_cache_memo = cache
+        _token_cache_memo = merged
         _token_cache_memo_time = time.time()
     except Exception as e:
         print_error(f"Token cache save error: {e}")
@@ -475,6 +519,18 @@ def cache_get(uid: str) -> Optional[Dict]:
     return entry
 
 def cache_set(uid: str, account_data: Dict):
+    # ---- FIXED: refuse to cache deleted accounts ----
+    try:
+        if bot_state.is_deleted(str(uid)):
+            print_warning(f"[CACHE] Refusing to cache deleted UID {uid}")
+            return
+        acc_id = str(account_data.get("account_id", ""))
+        if acc_id and bot_state.is_deleted(acc_id):
+            print_warning(f"[CACHE] Refusing to cache deleted account_id {acc_id}")
+            return
+    except Exception:
+        pass
+
     cache = _load_token_cache()
     entry = dict(account_data)
     entry["cached_at"] = time.time()
@@ -488,6 +544,54 @@ def cache_invalidate(uid: str):
         del cache[str(uid)]
         _save_token_cache(cache)
         print_warning(f"[CACHE] Invalidated: {uid}")
+
+# ---- FIXED: called from PAPAX_server after external delete. Forces re-read, removes keys, updates memo.
+def cache_invalidate_external(keys: List[str]):
+    """
+    Called by PAPAX_server.full_delete_account after an external delete.
+    Forces a re-read from disk (bypasses memo) and removes matching entries,
+    then writes back and refreshes the memo so subsequent app.py reads are consistent.
+    """
+    global _token_cache_memo, _token_cache_memo_time
+    try:
+        cache = _load_token_cache(force=True)
+        keys_set = {str(k) for k in keys if k}
+        removed = []
+        # Direct key match
+        for k in list(cache.keys()):
+            if k in keys_set:
+                del cache[k]
+                removed.append(k)
+        # Value-based match
+        for key in list(cache.keys()):
+            val = cache.get(key)
+            if not isinstance(val, dict):
+                continue
+            matched = False
+            if str(val.get("account_id", "")).strip() in keys_set:
+                matched = True
+            elif str(val.get("auth_uid", "")).strip() in keys_set:
+                matched = True
+            elif str(val.get("open_id", "")).strip() in keys_set:
+                matched = True
+            else:
+                tok = val.get("auth_token")
+                if tok and f"tok_{str(tok)[:20]}" in keys_set:
+                    matched = True
+            if matched and key not in removed:
+                del cache[key]
+                removed.append(key)
+
+        if removed:
+            tmp_file = TOKEN_CACHE_FILE + ".tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(cache, f, indent=2, default=_json_serializer)
+            os.replace(tmp_file, TOKEN_CACHE_FILE)
+            _token_cache_memo = cache
+            _token_cache_memo_time = time.time()
+            print_warning(f"[CACHE-EXT] Invalidated externally: {removed}")
+    except Exception as e:
+        print_error(f"cache_invalidate_external error: {e}")
 
 
 # ==================== ENCRYPTION & PROTOBUF ====================
@@ -1756,6 +1860,7 @@ async def informational(addrs, starter_packet, key, iv, region="BD", max_reconne
 
 # ==================== ACCOUNT PROCESSORS ====================
 def _register_credentials(account_data: Dict):
+    # ---- FIXED: also populate identity_map so full_delete can expand identifiers ----
     try:
         acc_id = str(account_data['account_id'])
         bot_state.account_credentials[acc_id] = account_data
@@ -1763,6 +1868,10 @@ def _register_credentials(account_data: Dict):
             bot_state.account_credentials[str(account_data['auth_uid'])] = account_data
         if account_data.get('auth_token'):
             bot_state.account_credentials[f"tok_{account_data['auth_token'][:20]}"] = account_data
+        try:
+            bot_state._track_identity(account_data)
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -1875,6 +1984,11 @@ async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
         region = majorlogin_response.region or get_proto_field(dict_res, 3, "BD")
         print_success(f"[DEBUG] Profile: {nickname} level={level} exp={exp} region={region}")
 
+        # ---- FIXED: kill-switch check before register/cache ----
+        if bot_state.is_deleted(uid) or bot_state.is_deleted(acc_id):
+            print_warning(f"[LOGIN] UID {uid} was deleted during login → discarding")
+            return None
+
         bot_state.register_account(uid=acc_id, nickname=nickname, region=region, level=level, exp=exp, likes=likes)
 
         account_data = {
@@ -1975,6 +2089,11 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
         likes = int(get_proto_field(dict_res, 8, 0))
         nickname = res_proto.nickname or get_proto_field(dict_res, 4, f"Player_{acc_id}")
         region = majorlogin_response.region or get_proto_field(dict_res, 3, "BD")
+
+        # ---- FIXED: kill-switch check before register/cache ----
+        if bot_state.is_deleted(cache_key) or bot_state.is_deleted(acc_id):
+            print_warning(f"[LOGIN] Token {access_token[:10]}... was deleted during login → discarding")
+            return None
 
         bot_state.register_account(uid=acc_id, nickname=nickname, region=region, level=level, exp=exp, likes=likes)
 
@@ -2145,6 +2264,14 @@ async def main():
         print_success(f"Web Dashboard live at http://localhost:{WEB_PORT}")
     except Exception as e:
         print_error(f"Could not start web dashboard: {e}")
+
+    # ---- FIXED: wire external cache invalidation hook into PAPAX_server ----
+    try:
+        import PAPAX_server as _px
+        _px.EXTERNAL_CACHE_INVALIDATOR = cache_invalidate_external
+        print_success("Wired PAPAX external cache invalidator")
+    except Exception as e:
+        print_warning(f"Could not wire external cache invalidator: {e}")
 
     async def on_account_added_handler(data):
         if "token" in data and data["token"]:
