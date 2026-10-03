@@ -16,9 +16,216 @@ TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
 STUCK_TIMEOUT = 300  # 5 minutes
 
-# Hook set by app.py at startup so PAPAX can force-clear the memoized cache
-# safely (avoids the app.py memo resurrecting deleted entries).
 EXTERNAL_CACHE_INVALIDATOR = None
+
+
+# ============================================================
+# BULLETPROOF DELETE HELPERS
+# ============================================================
+def _scan_cache_for_identifiers(given: str) -> set:
+    """
+    Read token_cache.json and return EVERY identifier that belongs to the
+    same account as `given`. Handles the case where `given` is a guest uid
+    but the cache key is the account_id, or vice versa.
+    """
+    found = set()
+    if not given:
+        return found
+    if not os.path.exists(TOKEN_CACHE_FILE):
+        return found
+    try:
+        with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+        cache = json.loads(raw) if raw else {}
+        if not isinstance(cache, dict):
+            return found
+    except Exception:
+        return found
+
+    for key, val in cache.items():
+        if not isinstance(val, dict):
+            continue
+        # Collect every identifier this entry knows about
+        entry_ids = {str(key).strip()}
+        for field in ("account_id", "auth_uid", "open_id", "uid"):
+            fv = val.get(field)
+            if fv is not None:
+                entry_ids.add(str(fv).strip())
+        for field in ("auth_token", "access_token", "token"):
+            fv = val.get(field)
+            if fv:
+                entry_ids.add(f"tok_{str(fv)[:20]}")
+
+        # If any of them equals `given`, absorb the whole set
+        if given in entry_ids:
+            found.update(entry_ids)
+    return found
+
+
+def _scan_devices_for_identifiers(given: str) -> set:
+    """
+    Read devices.json and return EVERY key that belongs to the same account
+    as `given`. devices.json is keyed by whatever identifier was passed to
+    get_device_for_account() — could be guest uid OR open_id.
+    """
+    found = set()
+    if not given:
+        return found
+    if not os.path.exists(DEVICES_FILE):
+        return found
+    try:
+        with open(DEVICES_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+        devices = json.loads(raw) if raw else {}
+        if not isinstance(devices, dict):
+            return found
+    except Exception:
+        return found
+
+    # Also consult token_cache to map account_id <-> guest_uid <-> open_id
+    related = _scan_cache_for_identifiers(given) | {given}
+
+    for key, val in list(devices.items()):
+        key_str = str(key).strip()
+        if key_str == given or key_str in related:
+            found.add(key)
+            continue
+        if isinstance(val, dict):
+            for field in ("account_id", "auth_uid", "open_id", "uid"):
+                fv = val.get(field)
+                if fv is not None:
+                    fv_str = str(fv).strip()
+                    if fv_str == given or fv_str in related:
+                        found.add(key)
+                        break
+    return found
+
+
+def _nuke_cache_by_any_id(ids: set) -> list:
+    """Aggressively remove any token_cache.json entry matching ANY id."""
+    if not os.path.exists(TOKEN_CACHE_FILE):
+        return []
+    try:
+        with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+        cache = json.loads(raw) if raw else {}
+        if not isinstance(cache, dict):
+            return []
+    except Exception as e:
+        print(f"[NUKE] token_cache read error: {e}")
+        return []
+
+    lookup = set()
+    for i in ids:
+        if i is None:
+            continue
+        s = str(i).strip()
+        if not s:
+            continue
+        lookup.add(s)
+        if len(s) >= 20 and not s.isdigit():
+            lookup.add(f"tok_{s[:20]}")
+
+    removed = []
+    for key, val in list(cache.items()):
+        key_str = str(key).strip()
+        hit = False
+
+        if key_str in lookup:
+            hit = True
+
+        if not hit and key_str.startswith("tok_"):
+            for lk in lookup:
+                if key_str == f"tok_{lk[:20]}":
+                    hit = True
+                    break
+
+        if not hit and isinstance(val, dict):
+            for field in ("account_id", "auth_uid", "open_id", "uid",
+                          "auth_token", "access_token", "token"):
+                fv = val.get(field)
+                if fv is None:
+                    continue
+                fv_str = str(fv).strip()
+                if not fv_str:
+                    continue
+                if fv_str in lookup:
+                    hit = True
+                    break
+                if field in ("auth_token", "access_token", "token"):
+                    if len(fv_str) >= 20:
+                        for lk in lookup:
+                            if lk == f"tok_{fv_str[:20]}":
+                                hit = True
+                                break
+                if hit:
+                    break
+
+        if hit:
+            removed.append(key)
+
+    if removed:
+        for k in removed:
+            cache.pop(k, None)
+        tmp = TOKEN_CACHE_FILE + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cache, f, indent=2)
+            os.replace(tmp, TOKEN_CACHE_FILE)
+            print(f"\033[93m[NUKE] token_cache.json removed keys: {removed}\033[0m")
+        except Exception as e:
+            print(f"[NUKE] token_cache write error: {e}")
+    else:
+        print(f"\033[93m[NUKE] token_cache.json matched nothing for ids: {lookup}\033[0m")
+    return removed
+
+
+def _nuke_devices_by_any_id(ids: set) -> list:
+    """Aggressively remove any devices.json entry matching ANY id."""
+    if not os.path.exists(DEVICES_FILE):
+        return []
+    try:
+        with open(DEVICES_FILE, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+        devices = json.loads(raw) if raw else {}
+        if not isinstance(devices, dict):
+            return []
+    except Exception as e:
+        print(f"[NUKE] devices read error: {e}")
+        return []
+
+    lookup = {str(i).strip() for i in ids if i is not None and str(i).strip()}
+    # Also add tok_<20> forms
+    for s in list(lookup):
+        if len(s) >= 20 and not s.isdigit():
+            lookup.add(f"tok_{s[:20]}")
+
+    removed = []
+    for key, val in list(devices.items()):
+        key_str = str(key).strip()
+        if key_str in lookup:
+            removed.append(key)
+            continue
+        if isinstance(val, dict):
+            hit = False
+            for field in ("account_id", "auth_uid", "open_id", "uid"):
+                fv = val.get(field)
+                if fv is not None and str(fv).strip() in lookup:
+                    hit = True
+                    break
+            if hit:
+                removed.append(key)
+
+    if removed:
+        for k in removed:
+            devices.pop(k, None)
+        try:
+            with open(DEVICES_FILE, "w", encoding="utf-8") as f:
+                json.dump(devices, f, indent=4)
+            print(f"\033[93m[NUKE] devices.json removed keys: {removed}\033[0m")
+        except Exception as e:
+            print(f"[NUKE] devices write error: {e}")
+    return removed
 
 
 class BotState:
@@ -33,9 +240,7 @@ class BotState:
         self.refresh_callbacks: Dict[str, Any] = {}
         self.account_credentials: Dict[str, Dict[str, Any]] = {}
         self.paused_accounts: set = set()
-        # 🔒 HARD KILL SWITCH: any UID in here can NEVER be re-registered
         self.deleted_accounts: set = set()
-        # Map account_id -> all linked identifiers (uid, open_id, tokens)
         self.identity_map: Dict[str, set] = {}
 
     def log(self, message: str, level: str = "info", uid: Optional[str] = None, category: str = None):
@@ -65,7 +270,6 @@ class BotState:
             self.logs.pop(0)
 
     def _track_identity(self, account_data: Dict):
-        """Track every known identifier for this account so delete works on all of them."""
         try:
             acc_id = str(account_data.get("account_id", "")).strip()
             if not acc_id:
@@ -83,7 +287,6 @@ class BotState:
 
     def register_account(self, uid: str, nickname: str, region: str, level: int, exp: int, likes: int = 0):
         uid_str = str(uid)
-        # 🔒 HARD BLOCK: deleted accounts can never come back
         if uid_str in self.deleted_accounts:
             return
         if uid_str not in self.accounts:
@@ -203,29 +406,21 @@ class BotState:
     def recalc_totals(self):
         self.total_gained_exp = sum(acc.get("gained_exp", 0) for acc in self.accounts.values())
 
-    # ==================== FULL DELETE (permanent, cross-file, multi-identifier) ====================
+    # ============================================================
+    # FULL DELETE
+    # ============================================================
     def full_delete_account(self, uid: str) -> bool:
-        """
-        Completely remove account from ALL state + files.
-
-        Works with ANY identifier: guest uid, account_id, open_id, or token prefix.
-        Uses the identity map to expand the given uid into ALL known identifiers,
-        then removes every matching entry from accounts.json / token_cache.json / devices.json.
-        """
         given = str(uid).strip()
         removed_any = False
 
-        # Build the full set of identifiers to remove
+        # Build identifier set
         all_ids = {given}
-        # Expand via identity map (given might be account_id OR uid)
         if given in self.identity_map:
             all_ids.update(self.identity_map[given])
-        # Also scan identity map for entries where given appears as a value
         for acc_id, id_set in self.identity_map.items():
             if given in id_set:
                 all_ids.add(acc_id)
                 all_ids.update(id_set)
-        # Also check credentials dict
         for key, cred in self.account_credentials.items():
             if not isinstance(cred, dict):
                 continue
@@ -239,19 +434,54 @@ class BotState:
                 all_ids.update(cred_ids)
                 if cred.get("auth_token"):
                     all_ids.add(f"tok_{str(cred['auth_token'])[:20]}")
-        # Also check registered accounts
         for acc_key, acc in self.accounts.items():
             if str(acc.get("uid", "")) == given:
                 all_ids.add(acc_key)
+                cred = self.account_credentials.get(str(acc_key))
+                if isinstance(cred, dict):
+                    for f in ("account_id", "auth_uid", "open_id"):
+                        v = cred.get(f)
+                        if v:
+                            all_ids.add(str(v))
+                    if cred.get("auth_token"):
+                        all_ids.add(f"tok_{str(cred['auth_token'])[:20]}")
+
+        # Scan accounts.json
+        try:
+            if os.path.exists(ACCOUNTS_FILE):
+                with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                    accs = json.load(f)
+                if isinstance(accs, list):
+                    for a in accs:
+                        if not isinstance(a, dict):
+                            continue
+                        if (str(a.get("uid", "")).strip() == given
+                                or str(a.get("account_id", "")).strip() == given):
+                            if a.get("uid"):
+                                all_ids.add(str(a["uid"]))
+                            if a.get("account_id"):
+                                all_ids.add(str(a["account_id"]))
+                            if a.get("token"):
+                                all_ids.add(f"tok_{str(a['token'])[:20]}")
+        except Exception:
+            pass
+
+        # Scan token_cache.json to bridge uid <-> account_id <-> open_id
+        try:
+            cache_related = _scan_cache_for_identifiers(given)
+            all_ids.update(cache_related)
+        except Exception:
+            pass
 
         all_ids.discard("")
         all_ids.discard("None")
 
-        # 🔒 Add ALL identifiers to kill switch FIRST
+        print(f"\033[93m[DELETE] Identifier set for '{given}': {all_ids}\033[0m")
+
         for i in all_ids:
             self.deleted_accounts.add(i)
 
-        # 1. Remove from accounts.json — match ANY known identifier
+        # 1. accounts.json
         try:
             existing = []
             if os.path.exists(ACCOUNTS_FILE):
@@ -259,107 +489,59 @@ class BotState:
                     existing = json.load(f)
             if not isinstance(existing, list):
                 existing = []
-            original_len = len(existing)
+            before = len(existing)
             existing = [
                 acc for acc in existing
                 if str(acc.get("uid", "")).strip() not in all_ids
                 and str(acc.get("account_id", "")).strip() not in all_ids
             ]
-            if len(existing) != original_len:
+            if len(existing) != before:
                 with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
                     json.dump(existing, f, indent=2)
                 removed_any = True
-                print(f"\033[93m[DELETE] Removed {original_len - len(existing)} entry from accounts.json for ids: {all_ids}\033[0m")
+                print(f"\033[93m[DELETE] accounts.json: removed {before - len(existing)}\033[0m")
         except Exception as e:
-            print(f"[DELETE] Error removing from accounts.json: {e}")
+            print(f"[DELETE] accounts.json error: {e}")
 
-        # 2. Remove from token_cache.json — use external invalidator hook if available
+        # 2. token_cache.json — hook + guaranteed nuke
         try:
             if EXTERNAL_CACHE_INVALIDATOR is not None:
-                EXTERNAL_CACHE_INVALIDATOR(list(all_ids))
+                try:
+                    EXTERNAL_CACHE_INVALIDATOR(list(all_ids))
+                except Exception as e:
+                    print(f"[DELETE] hook error (continuing): {e}")
+            nuked = _nuke_cache_by_any_id(all_ids)
+            if nuked:
                 removed_any = True
-            else:
-                # Fallback: direct file edit (may be overwritten by app.py memo;
-                # see app.py's _save_token_cache which now merges safely)
-                if os.path.exists(TOKEN_CACHE_FILE):
-                    with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
-                        cache = json.load(f)
-                    if not isinstance(cache, dict):
-                        cache = {}
-                    deleted_keys = set()
-                    for k in all_ids:
-                        if k in cache:
-                            deleted_keys.add(k)
-                    for key, val in list(cache.items()):
-                        if not isinstance(val, dict):
-                            continue
-                        if str(val.get("account_id", "")).strip() in all_ids:
-                            deleted_keys.add(key)
-                        if str(val.get("auth_uid", "")).strip() in all_ids:
-                            deleted_keys.add(key)
-                        if str(val.get("open_id", "")).strip() in all_ids:
-                            deleted_keys.add(key)
-                        tok = val.get("auth_token")
-                        if tok and f"tok_{str(tok)[:20]}" in all_ids:
-                            deleted_keys.add(key)
-                    for k in deleted_keys:
-                        cache.pop(k, None)
-                        removed_any = True
-                    if deleted_keys:
-                        with open(TOKEN_CACHE_FILE, "w", encoding="utf-8") as f:
-                            json.dump(cache, f, indent=2)
-                        print(f"\033[93m[DELETE] Removed {len(deleted_keys)} keys from token_cache.json\033[0m")
         except Exception as e:
-            print(f"[DELETE] Error removing from token_cache.json: {e}")
+            print(f"[DELETE] token_cache error: {e}")
 
-        # 3. Remove from devices.json — match ANY known identifier
+        # 3. devices.json — find keys via cache scan + value match, then nuke
         try:
-            if os.path.exists(DEVICES_FILE):
-                with open(DEVICES_FILE, "r", encoding="utf-8") as f:
-                    devices = json.load(f)
-                if not isinstance(devices, dict):
-                    devices = {}
-                to_del = set()
-                for k, v in list(devices.items()):
-                    if str(k) in all_ids:
-                        to_del.add(k)
-                        continue
-                    if isinstance(v, dict):
-                        if str(v.get("account_id", "")).strip() in all_ids:
-                            to_del.add(k)
-                        if str(v.get("auth_uid", "")).strip() in all_ids:
-                            to_del.add(k)
-                        if str(v.get("open_id", "")).strip() in all_ids:
-                            to_del.add(k)
-                for k in to_del:
-                    devices.pop(k, None)
-                if to_del:
-                    with open(DEVICES_FILE, "w", encoding="utf-8") as f:
-                        json.dump(devices, f, indent=4)
-                    print(f"\033[93m[DELETE] Removed {len(to_del)} keys from devices.json\033[0m")
+            dev_keys = _scan_devices_for_identifiers(given)
+            all_ids.update(dev_keys)  # absorb device keys into identifier set
+            nuked_dev = _nuke_devices_by_any_id(all_ids)
+            if nuked_dev:
+                print(f"\033[93m[DELETE] devices.json: removed {nuked_dev}\033[0m")
         except Exception as e:
-            print(f"[DELETE] Error removing from devices.json: {e}")
+            print(f"[DELETE] devices error: {e}")
 
-        # 4. Cancel worker tasks for ALL identifiers
+        # 4. Cancel workers
         for i in list(all_ids):
             if i in self.account_workers:
-                try:
-                    self.account_workers[i].cancel()
-                except Exception:
-                    pass
-                try:
-                    del self.account_workers[i]
-                except Exception:
-                    pass
+                try: self.account_workers[i].cancel()
+                except Exception: pass
+                try: del self.account_workers[i]
+                except Exception: pass
 
-        # 5. Remove from in-memory state
+        # 5. In-memory state
         for i in list(all_ids):
             self.accounts.pop(i, None)
             self.paused_accounts.discard(i)
             self.account_credentials.pop(i, None)
             self.identity_map.pop(i, None)
 
-        # 6. Wipe match counters
+        # 6. Match counters
         try:
             from app import _match_counters
             for i in all_ids:
@@ -370,9 +552,7 @@ class BotState:
         self.recalc_totals()
         return removed_any
 
-    # ==================== STUCK ACCOUNT CLEANUP ====================
     def cleanup_stuck_accounts(self) -> List[str]:
-        """Find accounts that haven't found a match in STUCK_TIMEOUT and FULLY delete them."""
         now = time.time()
         stuck_uids = []
         for uid_str, acc in list(self.accounts.items()):
@@ -406,10 +586,6 @@ bot_state = BotState()
 
 # ==================== BOOT-TIME CLEANUP ====================
 async def boot_cleanup_stale():
-    """
-    On startup: purge orphan entries from token_cache.json and devices.json
-    that don't correspond to any account in accounts.json.
-    """
     try:
         accounts = []
         if os.path.exists(ACCOUNTS_FILE):
@@ -494,7 +670,6 @@ async def handle_index(request: web.Request) -> web.Response:
 
 
 async def handle_get_stats(request: web.Request) -> web.Response:
-    # 1. Load accounts.json — the source of truth for "added accounts"
     added_accounts = []
     try:
         if os.path.exists(ACCOUNTS_FILE):
@@ -505,17 +680,13 @@ async def handle_get_stats(request: web.Request) -> web.Response:
     except Exception:
         added_accounts = []
 
-    # 2. Runtime state from bot_state
     runtime = list(bot_state.accounts.values())
     runtime_by_uid = {str(a["uid"]): a for a in runtime}
 
-    # 3. Build merged list
     merged: List[Dict[str, Any]] = []
     seen_uids = set()
 
-    # First: every added account from accounts.json
     for acc in added_accounts:
-        # Skip accounts marked deleted
         raw_uid = str(acc.get("uid", "")).strip()
         raw_token = acc.get("token", "")
         lookup_key = raw_uid if raw_uid else f"tok_{str(raw_token)[:20]}"
@@ -523,7 +694,6 @@ async def handle_get_stats(request: web.Request) -> web.Response:
         if lookup_key and lookup_key in bot_state.deleted_accounts:
             continue
 
-        # Try to match runtime by uid OR by password/token match
         runtime_acc = None
         if raw_uid and raw_uid in runtime_by_uid:
             runtime_acc = runtime_by_uid[raw_uid]
@@ -573,12 +743,10 @@ async def handle_get_stats(request: web.Request) -> web.Response:
             })
             seen_uids.add(placeholder_uid)
 
-    # Then: any runtime accounts not sourced from accounts.json (edge case)
     for rt in runtime:
         if str(rt["uid"]) not in seen_uids:
             merged.append(rt)
 
-    # Sort: pending/connecting first, then by gained exp
     def sort_key(a):
         order = {"CONNECTING": 0, "PENDING": 1, "SEARCHING": 2, "ONLINE": 3, "IN_MATCH": 4,
                  "PAUSED": 5, "ERROR": 6, "OFFLINE": 7}
@@ -596,6 +764,12 @@ async def handle_get_stats(request: web.Request) -> web.Response:
 
 
 async def handle_add_account(request: web.Request) -> web.Response:
+    """
+    Add account. If the account was previously deleted, we FULLY PURGE it from
+    the kill-switch, token_cache.json and devices.json first, so the fresh
+    login can create brand-new cache entries and the account does NOT stay
+    stuck in PENDING.
+    """
     try:
         data = await request.json()
         existing = []
@@ -613,16 +787,44 @@ async def handle_add_account(request: web.Request) -> web.Response:
             pwd = str(data["password"]).strip()
             if not uid or not pwd:
                 return web.json_response({"status": "error", "error": "UID and Password required"})
-            # User explicitly re-added: remove from kill-switch
-            bot_state.deleted_accounts.discard(uid)
+
+            # ---- FULL UN-DELETE / PURGE ----
+            # 1) Remove uid AND every identifier related to it from kill-switch
+            related = _scan_cache_for_identifiers(uid) | {uid}
+            for rid in related:
+                bot_state.deleted_accounts.discard(rid)
+            # Also discard anything still in identity_map
+            for acc_id, ids in list(bot_state.identity_map.items()):
+                if uid in ids:
+                    for i in ids:
+                        bot_state.deleted_accounts.discard(i)
+
+            # 2) Nuke ANY stale cache entry related to this uid so login is fresh
+            _nuke_cache_by_any_id({uid} | related)
+            _nuke_devices_by_any_id({uid} | related)
+
+            # 3) Remove any runtime state for this account
+            for rid in related:
+                bot_state.accounts.pop(rid, None)
+                bot_state.account_credentials.pop(rid, None)
+                bot_state.paused_accounts.discard(rid)
+
             existing = [acc for acc in existing if str(acc.get("uid")) != uid]
             existing.append({"uid": uid, "password": pwd})
             bot_state.log(f"New account added: UID {uid}", "success", uid, "system")
+
         elif "token" in data:
             token = str(data["token"]).strip()
             if not token:
                 return web.json_response({"status": "error", "error": "Token required"})
-            bot_state.deleted_accounts.discard(f"tok_{token[:20]}")
+
+            tok_key = f"tok_{token[:20]}"
+            related = _scan_cache_for_identifiers(tok_key) | {tok_key}
+            for rid in related:
+                bot_state.deleted_accounts.discard(rid)
+            _nuke_cache_by_any_id({tok_key} | related)
+            _nuke_devices_by_any_id({tok_key} | related)
+
             existing = [acc for acc in existing if acc.get("token") != token]
             existing.append({"token": token})
             bot_state.log(f"New account added: Token {token[:10]}...", "success", None, "system")
@@ -647,20 +849,23 @@ async def handle_delete_account(request: web.Request) -> web.Response:
         if not uid:
             return web.json_response({"status": "error", "error": "UID required"})
 
-        # Also accept optional additional identifiers from the frontend
-        extra_ids = data.get("extra_ids", [])
-        if isinstance(extra_ids, list):
-            for eid in extra_ids:
-                if eid and str(eid).strip() != uid:
-                    bot_state.deleted_accounts.add(str(eid).strip())
+        extra_ids = data.get("extra_ids", []) or []
+        account_id = data.get("account_id")
+        if account_id:
+            extra_ids.append(str(account_id))
+        for extra_field in ("auth_uid", "open_id", "token"):
+            v = data.get(extra_field)
+            if v:
+                extra_ids.append(str(v))
 
-        # Snapshot worker tasks so we can await their cancellation
+        for eid in list(extra_ids) + [uid]:
+            if eid and str(eid).strip():
+                bot_state.deleted_accounts.add(str(eid).strip())
+
         pending_workers = list(bot_state.account_workers.values())
 
         bot_state.full_delete_account(uid)
 
-        # Give cancelled workers a moment to finish their cleanup paths so any
-        # in-flight cache_set() can't resurrect the entry after our delete.
         if pending_workers:
             try:
                 await asyncio.wait_for(
@@ -672,11 +877,16 @@ async def handle_delete_account(request: web.Request) -> web.Response:
             except Exception:
                 pass
 
-        # Re-run external cache invalidator AFTER workers settle to catch anything
-        # that might have slipped in during cancellation.
         try:
             if EXTERNAL_CACHE_INVALIDATOR is not None:
-                EXTERNAL_CACHE_INVALIDATOR([uid])
+                EXTERNAL_CACHE_INVALIDATOR([uid] + [str(e) for e in extra_ids if e])
+        except Exception:
+            pass
+
+        # Final guaranteed nukes for both files
+        try:
+            _nuke_cache_by_any_id({uid} | {str(e) for e in extra_ids if e})
+            _nuke_devices_by_any_id({uid} | {str(e) for e in extra_ids if e})
         except Exception:
             pass
 
