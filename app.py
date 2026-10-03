@@ -32,7 +32,12 @@ from PXP import MESSAGE_ID_TO_NAME
 import XEROXMODS_pb2
 
 # ==================== WEB DASHBOARD ====================
-from PAPAX_server import bot_state, start_web_dashboard
+# Make sure these are imported
+from PAPAX_server import (
+    bot_state, start_web_dashboard,
+    TOKEN_CACHE_FILE, DEVICES_FILE, ACCOUNTS_FILE,
+    _purge_token_cache, _purge_devices
+)
 
 # ==================== CONFIGURATION ====================
 WEB_HOST = "0.0.0.0"
@@ -400,11 +405,9 @@ async def _get_total_match_count() -> int:
 
 
 # ==================== TOKEN CACHE ====================
-# ---- FIXED: force-reload support + merge-on-save + external invalidator hook ----
 _token_cache_memo: Dict[str, Any] = {}
 _token_cache_memo_time: float = 0.0
 _TOKEN_CACHE_MEMO_TTL = 5.0
-_token_cache_lock = asyncio.Lock()
 
 def _json_serializer(obj):
     if isinstance(obj, (bytes, bytearray)):
@@ -421,23 +424,18 @@ def _json_deserializer(obj):
         return [_json_deserializer(x) for x in obj]
     return obj
 
-def _load_token_cache(force: bool = False) -> Dict[str, Any]:
+def _load_token_cache() -> Dict[str, Any]:
     global _token_cache_memo, _token_cache_memo_time
     now = time.time()
-    if not force and _token_cache_memo and (now - _token_cache_memo_time) < _TOKEN_CACHE_MEMO_TTL:
+    if _token_cache_memo and (now - _token_cache_memo_time) < _TOKEN_CACHE_MEMO_TTL:
         return _token_cache_memo
 
     if not os.path.exists(TOKEN_CACHE_FILE):
-        _token_cache_memo = {}
-        _token_cache_memo_time = now
         return {}
-
     try:
         with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip()
         if not content:
-            _token_cache_memo = {}
-            _token_cache_memo_time = now
             return {}
         data = json.loads(content)
         if not isinstance(data, dict):
@@ -450,53 +448,16 @@ def _load_token_cache(force: bool = False) -> Dict[str, Any]:
         print_error(f"Token cache corrupt → deleting: {e}")
         try: os.remove(TOKEN_CACHE_FILE)
         except Exception: pass
-        _token_cache_memo = {}
-        _token_cache_memo_time = now
         return {}
 
 def _save_token_cache(cache: Dict[str, Any]):
-    """
-    Merge with on-disk state so external deletions (from PAPAX_server) are not
-    resurrected by our memoized in-memory copy.
-    """
     global _token_cache_memo, _token_cache_memo_time
     try:
-        # Read raw disk state (authoritative for deletions)
-        disk = {}
-        if os.path.exists(TOKEN_CACHE_FILE):
-            try:
-                with open(TOKEN_CACHE_FILE, "r", encoding="utf-8") as f:
-                    raw = f.read().strip()
-                if raw:
-                    disk = _json_deserializer(json.loads(raw))
-                    if not isinstance(disk, dict):
-                        disk = {}
-            except Exception:
-                disk = {}
-
-        # Start from disk, then overlay our cache.
-        # Rule: any key present in our in-memory cache is kept ONLY if:
-        #   - it exists in disk already, OR
-        #   - it was cached very recently (fresh add this session, < 3s old)
-        # This preserves fresh writes while honoring external deletes.
-        merged = dict(disk)
-        now = time.time()
-        for k, v in cache.items():
-            if k in disk:
-                merged[k] = v
-            else:
-                # Not on disk: keep only if it's a fresh add (< 3s old)
-                if isinstance(v, dict):
-                    cached_at = v.get("cached_at", 0)
-                    if now - cached_at < 3.0:
-                        merged[k] = v
-                # else drop (was deleted externally)
-
         tmp_file = TOKEN_CACHE_FILE + ".tmp"
         with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(merged, f, indent=2, default=_json_serializer)
+            json.dump(cache, f, indent=2, default=_json_serializer)
         os.replace(tmp_file, TOKEN_CACHE_FILE)
-        _token_cache_memo = merged
+        _token_cache_memo = cache
         _token_cache_memo_time = time.time()
     except Exception as e:
         print_error(f"Token cache save error: {e}")
@@ -519,18 +480,6 @@ def cache_get(uid: str) -> Optional[Dict]:
     return entry
 
 def cache_set(uid: str, account_data: Dict):
-    # ---- FIXED: refuse to cache deleted accounts ----
-    try:
-        if bot_state.is_deleted(str(uid)):
-            print_warning(f"[CACHE] Refusing to cache deleted UID {uid}")
-            return
-        acc_id = str(account_data.get("account_id", ""))
-        if acc_id and bot_state.is_deleted(acc_id):
-            print_warning(f"[CACHE] Refusing to cache deleted account_id {acc_id}")
-            return
-    except Exception:
-        pass
-
     cache = _load_token_cache()
     entry = dict(account_data)
     entry["cached_at"] = time.time()
@@ -544,54 +493,6 @@ def cache_invalidate(uid: str):
         del cache[str(uid)]
         _save_token_cache(cache)
         print_warning(f"[CACHE] Invalidated: {uid}")
-
-# ---- FIXED: called from PAPAX_server after external delete. Forces re-read, removes keys, updates memo.
-def cache_invalidate_external(keys: List[str]):
-    """
-    Called by PAPAX_server.full_delete_account after an external delete.
-    Forces a re-read from disk (bypasses memo) and removes matching entries,
-    then writes back and refreshes the memo so subsequent app.py reads are consistent.
-    """
-    global _token_cache_memo, _token_cache_memo_time
-    try:
-        cache = _load_token_cache(force=True)
-        keys_set = {str(k) for k in keys if k}
-        removed = []
-        # Direct key match
-        for k in list(cache.keys()):
-            if k in keys_set:
-                del cache[k]
-                removed.append(k)
-        # Value-based match
-        for key in list(cache.keys()):
-            val = cache.get(key)
-            if not isinstance(val, dict):
-                continue
-            matched = False
-            if str(val.get("account_id", "")).strip() in keys_set:
-                matched = True
-            elif str(val.get("auth_uid", "")).strip() in keys_set:
-                matched = True
-            elif str(val.get("open_id", "")).strip() in keys_set:
-                matched = True
-            else:
-                tok = val.get("auth_token")
-                if tok and f"tok_{str(tok)[:20]}" in keys_set:
-                    matched = True
-            if matched and key not in removed:
-                del cache[key]
-                removed.append(key)
-
-        if removed:
-            tmp_file = TOKEN_CACHE_FILE + ".tmp"
-            with open(tmp_file, "w", encoding="utf-8") as f:
-                json.dump(cache, f, indent=2, default=_json_serializer)
-            os.replace(tmp_file, TOKEN_CACHE_FILE)
-            _token_cache_memo = cache
-            _token_cache_memo_time = time.time()
-            print_warning(f"[CACHE-EXT] Invalidated externally: {removed}")
-    except Exception as e:
-        print_error(f"cache_invalidate_external error: {e}")
 
 
 # ==================== ENCRYPTION & PROTOBUF ====================
@@ -919,6 +820,9 @@ async def send_getlogin(data, base_url, token, release_version):
         return None
 
 
+# ============================================================
+# ★★★ FIXED: BD login prefix — same as 2nd working script ★★★
+# ============================================================
 async def build_tcp_startup_packet(account_id, token, server_time, key, iv, region="BD", typ='OnLine'):
     uid_hex = f"{int(account_id):016x}"
     timestamp_hex = f"{int(server_time):08x}"
@@ -926,11 +830,12 @@ async def build_tcp_startup_packet(account_id, token, server_time, key, iv, regi
     encrypted_packet = (await aes_encrypt(encode_token, key, iv)).hex()
     encrypted_packet_length = f"{len(encrypted_packet) // 2:08x}"
     reg = str(region).upper() if region else "BD"
+    # ★ FIXED: BD uses 7219/8119 (not 7119/9219) ★
     if typ == 'OnLine':
-        prefix = '7119' if reg == 'BD' else ('7114' if reg == 'IND' else '7115')
+        prefix = '7219' if reg == 'BD' else ('7214' if reg == 'IND' else '7215')
         return f"{prefix}{uid_hex}{timestamp_hex}00000000{encrypted_packet_length}{encrypted_packet}"
     else:
-        prefix = '9219' if reg == 'BD' else ('9214' if reg == 'IND' else '9215')
+        prefix = '8119' if reg == 'BD' else ('8114' if reg == 'IND' else '8115')
         return f"{prefix}{uid_hex}{timestamp_hex}{encrypted_packet_length}{encrypted_packet}"
 
 async def send_keep_alive(region="BD"):
@@ -943,7 +848,7 @@ async def send_keep_alive(region="BD"):
 
 
 # ============================================================
-# START GAME LONE WOLF (original, unmodified)
+# START GAME LONE WOLF — ★ FIXED BD prefix ★
 # ============================================================
 async def start_game_lone_wolf(region, client_version, writer, key, iv):
     packet = bytes.fromhex("080112800a0a010b102b3a110a044944433110aa011a064555524f50453a100a044944433210311a064555524f504540014a0801090a0b1219202758016291090a8001303838463832424630324139363736373032303130313030303030303030303030303136303030313030313530303032323246393745454530463030303030303436373632353134303030303030303030303030303030303030303030303030303030303030303030303030303066663030303030303030636163666131366410241afb02735d5e571400024a775d45414d1a041b1c001f11010449715f4243481a001e1d071c1703004b1a4066785c524570735c51486775421b5c5a4c07504042685a63610816054e19025e75196001477c015165406370195f5547404e4550640103020f1304064863754268676c755f65576e40467e5f0a417a4701026d675d6e73670b1108495a4c6a0b78470b740065645e525a057258425f584a447d4e6759440c11044e7c596d7f4b625f7d04055a47505c4e1d6b5b4107447d7201057d7f0f14084e430457674f7e517d72015172415d027473577c4d615f79535256780911030f4d5e027a797f614165067806505d53777750475e75064257076500460817014e741e7e5078487e7a7c465e7669767153497064605a7376677773550d160148037e18675966787f4c42607a645f577e7b441b460776026b18685d0b110205490060020f70676175654674706671797f41067346677c4e06585e780f15074c57047b40517075415f6364027259674b5b0166407f7340600407770a22047a5d5c52300b3a0a167305067162727516134208312e3133302e3232480350015ae90403626253513635686e556f4e36416456324b796f566c636f477776484f624e56526c4d727073504b4f43654177616848494176795556497273743752737149734a7a786b3247525268377a2f637664626d504f6a73552f79626d38547a4c69586d2f474351696d494b53486833447955726f39515152756c34545350626d6d624b7949565937545671577059455372323646572f59624578507338514f706d317372785455736c30796a434144444d4f34616a654b615753366361496c554b4963797a494e396d52516f715277687939797257476d337a644345337a6a61436f492f5a585233656f65365a42647a64677654636b6b665733356e4d4c6a6a565072564b6433523172756174394e50514150724a5546627859696c4c5a3859707336654d5447666b6649793574666a526c314d4648706b51774c6373374439656378566c41636f374e664f6d2b30654756466c4434744478706771385533595973587645384842502f70666c767a737138316a32524f4d7857437556445442492f684735625462773166456e4249725162762b636144775147696f74554e316d4c4b77734379456f4766706746614251457645672b736a764c4c78704743334c304a5344532f74526169504354553344374e6249306547516651622f5a466f4c36455630775a324d6f583932414c572f5049752f56634663584e70596b356f7966326151416a536971486a2f363276354843644f525551303578754e6171795251625653704654303137655237675255636b4966366c6f447476342b514e4a4670766d74757077707774396a5a5974437a4b56743657726d6e36785837706658456251555434684f3758a201050803108703a201050804108103a20105080510c001a20105081d10cc01a2010408161078a20105080e10af01a201020815")
@@ -960,7 +865,10 @@ async def start_game_lone_wolf(region, client_version, writer, key, iv):
     packet_length = len(encrypted_packet) // 2
     hex_length = hex(packet_length)[2:]
     hex_length = hex_length if len(hex_length) > 1 else "0" + hex_length
-    final_packet = "031400" + "0" * (6 - len(hex_length)) + hex_length + encrypted_packet
+    # ★ FIXED: BD uses 031900 (not 031400) ★
+    reg = str(region).upper() if region else "BD"
+    reg_prefix = "031900" if reg == "BD" else ("031400" if reg == "IND" else "031500")
+    final_packet = reg_prefix + "0" * (6 - len(hex_length)) + hex_length + encrypted_packet
     writer.write(bytes.fromhex(final_packet))
     await writer.drain()
 
@@ -1860,7 +1768,6 @@ async def informational(addrs, starter_packet, key, iv, region="BD", max_reconne
 
 # ==================== ACCOUNT PROCESSORS ====================
 def _register_credentials(account_data: Dict):
-    # ---- FIXED: also populate identity_map so full_delete can expand identifiers ----
     try:
         acc_id = str(account_data['account_id'])
         bot_state.account_credentials[acc_id] = account_data
@@ -1868,10 +1775,6 @@ def _register_credentials(account_data: Dict):
             bot_state.account_credentials[str(account_data['auth_uid'])] = account_data
         if account_data.get('auth_token'):
             bot_state.account_credentials[f"tok_{account_data['auth_token'][:20]}"] = account_data
-        try:
-            bot_state._track_identity(account_data)
-        except Exception:
-            pass
     except Exception:
         pass
 
@@ -1984,11 +1887,6 @@ async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
         region = majorlogin_response.region or get_proto_field(dict_res, 3, "BD")
         print_success(f"[DEBUG] Profile: {nickname} level={level} exp={exp} region={region}")
 
-        # ---- FIXED: kill-switch check before register/cache ----
-        if bot_state.is_deleted(uid) or bot_state.is_deleted(acc_id):
-            print_warning(f"[LOGIN] UID {uid} was deleted during login → discarding")
-            return None
-
         bot_state.register_account(uid=acc_id, nickname=nickname, region=region, level=level, exp=exp, likes=likes)
 
         account_data = {
@@ -2090,11 +1988,6 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
         nickname = res_proto.nickname or get_proto_field(dict_res, 4, f"Player_{acc_id}")
         region = majorlogin_response.region or get_proto_field(dict_res, 3, "BD")
 
-        # ---- FIXED: kill-switch check before register/cache ----
-        if bot_state.is_deleted(cache_key) or bot_state.is_deleted(acc_id):
-            print_warning(f"[LOGIN] Token {access_token[:10]}... was deleted during login → discarding")
-            return None
-
         bot_state.register_account(uid=acc_id, nickname=nickname, region=region, level=level, exp=exp, likes=likes)
 
         account_data = {
@@ -2132,8 +2025,11 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
 
 async def run_account_worker(account_data: Dict, label: str):
     acc_id = str(account_data['account_id'])
+    auth_uid = str(account_data.get('auth_uid', '') or '')
+    auth_token = str(account_data.get('auth_token', '') or '')
     informational_task = None
     exp_task = None
+    functional_task = None
     try:
         reg = account_data.get('region', 'BD')
         tcp_packet_online = await build_tcp_startup_packet(
@@ -2177,56 +2073,101 @@ async def run_account_worker(account_data: Dict, label: str):
         print_error(f"run_account_worker error for {label}: {e}")
         traceback.print_exc()
     finally:
-        for t in (informational_task, exp_task):
-            if t and not t.done(): t.cancel()
-        for t in (informational_task, exp_task):
+        for t in (informational_task, exp_task, functional_task):
+            if t and not t.done():
+                t.cancel()
+        for t in (informational_task, exp_task, functional_task):
             if t:
-                try: await t
-                except (asyncio.CancelledError, Exception): pass
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
 
 
-async def account_loop_guest(uid: str, password: str):
+def _register_worker(account_data: Dict, task: asyncio.Task):
+    """Register worker task under every alias so delete can find it."""
+    aliases = set()
+    acc_id = str(account_data.get('account_id', '') or '')
+    auth_uid = str(account_data.get('auth_uid', '') or '')
+    auth_token = str(account_data.get('auth_token', '') or '')
+    if acc_id:
+        aliases.add(acc_id)
+    if auth_uid:
+        aliases.add(auth_uid)
+    if auth_token:
+        aliases.add(f"tok_{auth_token[:20]}")
+    if not aliases:
+        aliases.add(str(id(task)))
+    primary = acc_id or auth_uid or next(iter(aliases))
+    bot_state.account_workers[primary] = task
+    for alias in aliases:
+        bot_state.worker_aliases[alias] = primary
+
+
+async def account_loop_guest(uid: str, password: str, stop_event: Optional[asyncio.Event] = None):
     while True:
+        if stop_event and stop_event.is_set():
+            print_warning(f"Worker for guest UID {uid} stopped (stop_event).")
+            break
         try:
             print_info(f"[LOGIN] Starting login for Guest UID: {uid}...")
             account_data = await process_account_uid_pass(uid, password)
             if not account_data:
                 print_error(f"Login failed for UID: {uid}. Retrying in 15s...")
-                await asyncio.sleep(15)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=15) if stop_event else await asyncio.sleep(15)
+                except asyncio.TimeoutError:
+                    pass
                 continue
             await run_account_worker(account_data, uid)
             print_warning(f"Session finished for {uid}. Reconnecting in 3s...")
-            await asyncio.sleep(3)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=3) if stop_event else await asyncio.sleep(3)
+            except asyncio.TimeoutError:
+                pass
         except asyncio.CancelledError:
             print_warning(f"Worker for {uid} stopped.")
             break
         except Exception as e:
             print_error(f"Error for UID {uid}: {e}. Retrying in 10s...")
-            await asyncio.sleep(10)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=10) if stop_event else await asyncio.sleep(10)
+            except asyncio.TimeoutError:
+                pass
 
 
-async def account_loop_token(token: str):
+async def account_loop_token(token: str, stop_event: Optional[asyncio.Event] = None):
     token_label = token[:10]
     while True:
+        if stop_event and stop_event.is_set():
+            print_warning(f"Worker for token {token_label} stopped (stop_event).")
+            break
         try:
             print_info("[LOGIN] Starting login with Access Token...")
             account_data = await process_account_token(token)
             if not account_data:
                 print_error("Login failed for Token. Retrying in 15s...")
-                await asyncio.sleep(15)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=15) if stop_event else await asyncio.sleep(15)
+                except asyncio.TimeoutError:
+                    pass
                 continue
             acc_id = str(account_data['account_id'])
             await run_account_worker(account_data, acc_id)
             print_warning("Token session finished. Reconnecting in 3s...")
-            await asyncio.sleep(3)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=3) if stop_event else await asyncio.sleep(3)
+            except asyncio.TimeoutError:
+                pass
         except asyncio.CancelledError:
             print_warning(f"Worker for token {token_label} stopped.")
             break
         except Exception as e:
             print_error(f"Token error: {e}. Retrying in 10s...")
-            await asyncio.sleep(10)
-
-
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=10) if stop_event else await asyncio.sleep(10)
+            except asyncio.TimeoutError:
+                pass
 # ==================== ACCOUNTS LOADER ====================
 def load_accounts():
     accounts = []
@@ -2265,24 +2206,20 @@ async def main():
     except Exception as e:
         print_error(f"Could not start web dashboard: {e}")
 
-    # ---- FIXED: wire external cache invalidation hook into PAPAX_server ----
-    try:
-        import PAPAX_server as _px
-        _px.EXTERNAL_CACHE_INVALIDATOR = cache_invalidate_external
-        print_success("Wired PAPAX external cache invalidator")
-    except Exception as e:
-        print_warning(f"Could not wire external cache invalidator: {e}")
-
     async def on_account_added_handler(data):
         if "token" in data and data["token"]:
             t = str(data["token"]).strip()
-            task = asyncio.create_task(account_loop_token(t))
-            bot_state.account_workers[t[:10]] = task
+            stop_evt = asyncio.Event()
+            task = asyncio.create_task(account_loop_token(t, stop_evt))
+            bot_state.account_workers[f"tok_{t[:20]}"] = task
+            bot_state.worker_aliases[f"tok_{t[:20]}"] = f"tok_{t[:20]}"
         elif "uid" in data and "password" in data:
             u = str(data["uid"]).strip()
             p = str(data["password"]).strip()
-            task = asyncio.create_task(account_loop_guest(u, p))
+            stop_evt = asyncio.Event()
+            task = asyncio.create_task(account_loop_guest(u, p, stop_evt))
             bot_state.account_workers[u] = task
+            bot_state.worker_aliases[u] = u
 
     async def on_refresh_account_handler(uid):
         await refresh_account_profile(uid)
@@ -2298,12 +2235,17 @@ async def main():
 
     for acc in accounts:
         if "token" in acc and acc["token"]:
-            t = asyncio.create_task(account_loop_token(acc["token"]))
-            bot_state.account_workers[acc["token"][:10]] = t
+            t = str(acc["token"]).strip()
+            stop_evt = asyncio.Event()
+            task = asyncio.create_task(account_loop_token(t, stop_evt))
+            bot_state.account_workers[f"tok_{t[:20]}"] = task
+            bot_state.worker_aliases[f"tok_{t[:20]}"] = f"tok_{t[:20]}"
         elif "uid" in acc and "password" in acc and acc["uid"]:
             u = str(acc["uid"])
-            t = asyncio.create_task(account_loop_guest(u, acc["password"]))
-            bot_state.account_workers[u] = t
+            stop_evt = asyncio.Event()
+            task = asyncio.create_task(account_loop_guest(u, acc["password"], stop_evt))
+            bot_state.account_workers[u] = task
+            bot_state.worker_aliases[u] = u
 
     try:
         while True:
@@ -2314,7 +2256,6 @@ async def main():
             t.cancel()
         await asyncio.gather(*bot_state.account_workers.values(), return_exceptions=True)
         print_success("All sessions cleanly closed.")
-
 
 if __name__ == "__main__":
     try:
