@@ -1,1368 +1,970 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>TITAN | FreeFire Level Up Bot</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --bg-base: #050810;
-            --bg-card: rgba(13, 19, 36, 0.85);
-            --bg-card-hover: rgba(19, 27, 50, 0.95);
-            --border-card: rgba(0, 242, 254, 0.12);
-            --border-hover: rgba(0, 242, 254, 0.4);
-            --accent-cyan: #00f2fe;
-            --accent-blue: #4facfe;
-            --accent-purple: #a855f7;
-            --accent-green: #00ff88;
-            --accent-red: #ff3366;
-            --accent-amber: #ffaa00;
-            --text-main: #f0f4fc;
-            --text-muted: #8e9bb5;
-            --text-dim: #64748b;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Outfit', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        html, body {
-            overflow-x: hidden;
-            width: 100%;
-        }
-
-        body {
-            background-color: #050810;
-            background-image: 
-                radial-gradient(circle at 0% 0%, rgba(168, 85, 247, 0.12) 0%, transparent 40%),
-                radial-gradient(circle at 100% 100%, rgba(0, 242, 254, 0.10) 0%, transparent 40%),
-                linear-gradient(180deg, #050810 0%, #080c18 100%);
-            color: var(--text-main);
-            min-height: 100vh;
-            padding: 10px;
-            padding-bottom: 40px;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        /* ================= HEADER ================= */
-        header {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            padding: 12px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-card);
-            border-radius: 14px;
-            backdrop-filter: blur(14px);
-            margin-bottom: 10px;
-        }
-
-        @media (min-width: 720px) {
-            header {
-                flex-direction: row;
-                align-items: center;
-                justify-content: space-between;
-                padding: 12px 16px;
-            }
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .logo-box {
-            width: 38px;
-            height: 38px;
-            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 17px;
-            color: #fff;
-            box-shadow: 0 0 15px rgba(0, 242, 254, 0.35);
-            flex-shrink: 0;
-        }
-
-        .brand-text h1 {
-            font-size: 13px;
-            font-weight: 800;
-            letter-spacing: -0.3px;
-            background: linear-gradient(90deg, #ffffff, var(--accent-cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            line-height: 1.2;
-        }
-
-        .brand-text p {
-            font-size: 10px;
-            color: var(--text-muted);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-top: 2px;
-            flex-wrap: wrap;
-        }
-
-        .live-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            background: rgba(0, 255, 136, 0.12);
-            border: 1px solid rgba(0, 255, 136, 0.3);
-            color: var(--accent-green);
-            padding: 2px 7px;
-            border-radius: 10px;
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-
-        .pulse-dot {
-            width: 5px;
-            height: 5px;
-            background: var(--accent-green);
-            border-radius: 50%;
-            animation: blink 1.2s infinite;
-            flex-shrink: 0;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.8); }
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 6px;
-            width: 100%;
-        }
-
-        @media (min-width: 720px) {
-            .header-actions {
-                width: auto;
-            }
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 9px 12px;
-            border-radius: 9px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            border: none;
-            outline: none;
-            white-space: nowrap;
-            flex: 1;
-            font-family: inherit;
-        }
-
-        @media (min-width: 720px) {
-            .btn {
-                flex: 0 0 auto;
-                padding: 8px 14px;
-                font-size: 13px;
-            }
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
-            color: #040914;
-            box-shadow: 0 3px 12px rgba(0, 242, 254, 0.2);
-        }
-
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(0, 242, 254, 0.35); }
-
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-card);
-            color: var(--text-main);
-        }
-
-        .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
-
-        .btn-danger {
-            background: rgba(255, 51, 102, 0.15);
-            border: 1px solid rgba(255, 51, 102, 0.35);
-            color: var(--accent-red);
-        }
-
-        .btn-danger:hover { background: rgba(255, 51, 102, 0.25); }
-
-        /* ================= STATS ================= */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        @media (min-width: 640px) {
-            .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        }
-
-        .stat-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-card);
-            border-radius: 12px;
-            padding: 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.25s ease;
-        }
-
-        .stat-card:hover { border-color: var(--border-hover); }
-
-        .stat-icon {
-            width: 34px;
-            height: 34px;
-            border-radius: 9px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            flex-shrink: 0;
-        }
-
-        .stat-icon.cyan { background: rgba(0, 242, 254, 0.15); color: var(--accent-cyan); }
-        .stat-icon.green { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
-        .stat-icon.purple { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
-        .stat-icon.amber { background: rgba(255, 170, 0, 0.15); color: var(--accent-amber); }
-
-        .stat-content { min-width: 0; flex: 1; }
-        .stat-content h3 {
-            font-size: 15px;
-            font-weight: 800;
-            letter-spacing: -0.3px;
-            color: #fff;
-            line-height: 1.1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .stat-content p {
-            font-size: 10px;
-            color: var(--text-muted);
-            font-weight: 500;
-            margin-top: 2px;
-        }
-
-        @media (min-width: 640px) {
-            .stat-content h3 { font-size: 18px; }
-            .stat-content p { font-size: 11px; }
-        }
-
-        /* ================= MAIN ================= */
-        .dashboard-main {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-        }
-
-        @media (min-width: 1024px) {
-            .dashboard-main { grid-template-columns: 1.6fr 1fr; gap: 12px; }
-        }
-
-        .card-box {
-            background: var(--bg-card);
-            border: 1px solid var(--border-card);
-            border-radius: 14px;
-            padding: 12px;
-            backdrop-filter: blur(12px);
-        }
-
-        @media (min-width: 640px) {
-            .card-box { padding: 14px; }
-        }
-
-        .box-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 12px;
-            gap: 8px;
-        }
-
-        .box-title {
-            font-size: 13px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 7px;
-        }
-
-        @media (min-width: 640px) {
-            .box-title { font-size: 14px; }
-        }
-
-        /* ================= ACCOUNTS ================= */
-        .accounts-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            max-height: 600px;
-            overflow-y: auto;
-            padding-right: 2px;
-        }
-
-        .accounts-list::-webkit-scrollbar { width: 4px; }
-        .accounts-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-
-        .account-card {
-            background: rgba(10, 15, 30, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            border-radius: 12px;
-            padding: 12px;
-            transition: all 0.2s ease;
-        }
-
-        .account-card:hover {
-            background: var(--bg-card-hover);
-            border-color: var(--border-hover);
-        }
-
-        .account-card.status-paused-card { border-color: rgba(255, 170, 0, 0.3); }
-        .account-card.status-error-card { border-color: rgba(255, 51, 102, 0.3); }
-
-        .acc-top {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .acc-profile {
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            min-width: 0;
-            flex: 1;
-        }
-
-        .acc-avatar {
-            width: 34px;
-            height: 34px;
-            border-radius: 9px;
-            background: linear-gradient(135deg, #1e293b, #334155);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 13px;
-            color: var(--accent-cyan);
-            border: 1px solid rgba(0, 242, 254, 0.2);
-            flex-shrink: 0;
-        }
-
-        .acc-info { min-width: 0; flex: 1; }
-
-        .acc-info h4 {
-            font-size: 12px;
-            font-weight: 700;
-            color: #fff;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            flex-wrap: wrap;
-            margin-bottom: 2px;
-        }
-
-        .region-badge {
-            background: rgba(255, 255, 255, 0.08);
-            color: #a5b4fc;
-            padding: 1px 5px;
-            border-radius: 4px;
-            font-size: 8px;
-            font-weight: 700;
-        }
-
-        .acc-info span {
-            font-size: 10px;
-            color: var(--text-muted);
-            font-family: 'JetBrains Mono', monospace;
-            display: block;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .acc-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 9px;
-            font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 10px;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        .status-connecting { background: rgba(0, 242, 254, 0.12); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.3); }
-        .status-pending { background: rgba(168, 85, 247, 0.12); color: var(--accent-purple); border: 1px solid rgba(168, 85, 247, 0.3); }
-        .status-match { background: rgba(0, 242, 254, 0.15); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.4); }
-        .status-searching { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); border: 1px solid rgba(168, 85, 247, 0.4); }
-        .status-paused { background: rgba(255, 170, 0, 0.15); color: var(--accent-amber); border: 1px solid rgba(255, 170, 0, 0.4); }
-        .status-error { background: rgba(255, 51, 102, 0.15); color: var(--accent-red); border: 1px solid rgba(255, 51, 102, 0.4); }
-
-        /* EXP Grid */
-        .exp-box {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 6px;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 8px 10px;
-            border-radius: 9px;
-            margin-bottom: 8px;
-        }
-
-        .exp-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-        .exp-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px; }
-        .exp-val {
-            font-size: 11px;
-            font-weight: 700;
-            font-family: 'JetBrains Mono', monospace;
-            color: #fff;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        @media (min-width: 640px) {
-            .exp-val { font-size: 12px; }
-        }
-
-        .exp-gained { color: var(--accent-green) !important; }
-
-        .level-progress { margin-bottom: 8px; }
-
-        .level-labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 10px;
-            margin-bottom: 4px;
-            font-weight: 600;
-        }
-
-        .progress-bar-bg {
-            height: 5px;
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .progress-bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
-            border-radius: 8px;
-            transition: width 0.5s ease;
-        }
-
-        .acc-actions {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding-top: 8px;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .acc-actions > span {
-            font-size: 10px;
-            color: var(--text-dim);
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            flex: 1;
-        }
-
-        .action-btns { display: flex; gap: 5px; }
-
-        .icon-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-card);
-            color: var(--text-muted);
-            width: 28px;
-            height: 28px;
-            border-radius: 7px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            font-size: 11px;
-            flex-shrink: 0;
-        }
-
-        .icon-btn:hover { background: rgba(0, 242, 254, 0.15); color: var(--accent-cyan); border-color: var(--accent-cyan); }
-        .icon-btn.danger:hover { background: rgba(255, 51, 102, 0.15); color: var(--accent-red); border-color: var(--accent-red); }
-        .icon-btn.warning:hover { background: rgba(255, 170, 0, 0.15); color: var(--accent-amber); border-color: var(--accent-amber); }
-        .icon-btn.success:hover { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); border-color: var(--accent-green); }
-
-        /* ================= LOGS ================= */
-        .logs-box { display: flex; flex-direction: column; min-height: 0; }
-
-        .log-tabs {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 8px;
-            overflow-x: auto;
-            padding-bottom: 2px;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
-        }
-
-        .log-tabs::-webkit-scrollbar { display: none; }
-
-        .log-tab {
-            padding: 5px 10px;
-            border-radius: 7px;
-            font-size: 10px;
-            font-weight: 700;
-            cursor: pointer;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid transparent;
-            color: var(--text-muted);
-            transition: all 0.15s;
-            white-space: nowrap;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .log-tab.active {
-            background: rgba(0, 242, 254, 0.12);
-            border-color: rgba(0, 242, 254, 0.4);
-            color: var(--accent-cyan);
-        }
-
-        .log-tab .tab-count {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 0 5px;
-            border-radius: 6px;
-            font-size: 9px;
-            min-width: 18px;
-            text-align: center;
-        }
-
-        .log-tab.active .tab-count { background: rgba(0, 242, 254, 0.25); }
-
-        .log-stream {
-            flex: 1;
-            min-height: 300px;
-            max-height: 500px;
-            background: #02040a;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            padding: 10px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 10.5px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            line-height: 1.45;
-        }
-
-        @media (min-width: 640px) {
-            .log-stream { font-size: 11px; padding: 12px; min-height: 400px; }
-        }
-
-        .log-stream::-webkit-scrollbar { width: 5px; }
-        .log-stream::-webkit-scrollbar-track { background: transparent; }
-        .log-stream::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
-
-        .log-item { word-break: break-word; }
-        .log-time { color: #475569; margin-right: 5px; }
-        .log-info { color: #60a5fa; }
-        .log-success { color: #4ade80; }
-        .log-warning { color: #fbbf24; }
-        .log-error { color: #f87171; }
-
-        .log-empty {
-            color: var(--text-dim);
-            text-align: center;
-            padding: 20px 0;
-            font-style: italic;
-        }
-
-        /* ================= MANAGEMENT ================= */
-        .mgmt-section {
-            margin-top: 10px;
-        }
-
-        .mgmt-tabs {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 12px;
-            overflow-x: auto;
-            padding-bottom: 2px;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
-        }
-
-        .mgmt-tabs::-webkit-scrollbar { display: none; }
-
-        .mgmt-tab {
-            padding: 7px 12px;
-            border-radius: 9px;
-            font-size: 11px;
-            font-weight: 700;
-            cursor: pointer;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid transparent;
-            color: var(--text-muted);
-            transition: all 0.15s;
-            white-space: nowrap;
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .mgmt-tab.active {
-            background: rgba(0, 242, 254, 0.12);
-            border-color: rgba(0, 242, 254, 0.4);
-            color: var(--accent-cyan);
-        }
-
-        .mgmt-tab .count {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 1px 6px;
-            border-radius: 8px;
-            font-size: 10px;
-            min-width: 20px;
-            text-align: center;
-        }
-
-        .mgmt-tab.active .count { background: rgba(0, 242, 254, 0.25); }
-
-        .mgmt-list { display: flex; flex-direction: column; gap: 6px; max-height: 400px; overflow-y: auto; padding-right: 2px; }
-        .mgmt-list::-webkit-scrollbar { width: 4px; }
-        .mgmt-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-
-        .mgmt-item {
-            background: rgba(10, 15, 30, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 10px;
-            padding: 10px 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            flex-wrap: wrap;
-            transition: all 0.15s ease;
-        }
-
-        .mgmt-item:hover { background: rgba(19, 27, 50, 0.8); border-color: rgba(0, 242, 254, 0.2); }
-
-        .mgmt-item-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-
-        .mgmt-item-info { min-width: 0; flex: 1; }
-        .mgmt-item-info h5 {
-            font-size: 11.5px;
-            font-weight: 700;
-            color: #fff;
-            margin-bottom: 2px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            flex-wrap: wrap;
-        }
-        .mgmt-item-info span {
-            font-size: 10px;
-            color: var(--text-muted);
-            font-family: 'JetBrains Mono', monospace;
-            display: block;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .mgmt-item-right { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-
-        .mgmt-avatar {
-            width: 30px;
-            height: 30px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, #1e293b, #334155);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            color: var(--accent-cyan);
-            border: 1px solid rgba(0, 242, 254, 0.2);
-            flex-shrink: 0;
-        }
-
-        /* ================= MODAL ================= */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(3, 6, 15, 0.85);
-            backdrop-filter: blur(8px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-            padding: 14px;
-        }
-
-        .modal-overlay.active { display: flex; }
-
-        .modal-card {
-            background: #0c1224;
-            border: 1px solid var(--border-card);
-            border-radius: 14px;
-            width: 100%;
-            max-width: 420px;
-            padding: 18px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 16px;
-        }
-
-        .modal-header h3 { font-size: 15px; font-weight: 700; }
-
-        .form-group { margin-bottom: 12px; }
-        .form-group label {
-            display: block;
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-muted);
-            margin-bottom: 5px;
-        }
-
-        .form-input {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 9px;
-            padding: 10px 12px;
-            color: #fff;
-            font-size: 13px;
-            outline: none;
-            transition: border-color 0.2s;
-            font-family: inherit;
-        }
-
-        .form-input:focus { border-color: var(--accent-cyan); box-shadow: 0 0 0 3px rgba(0, 242, 254, 0.1); }
-
-        textarea.form-input { resize: vertical; min-height: 70px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
-
-        .empty-state {
-            text-align: center;
-            padding: 28px 12px;
-            color: var(--text-muted);
-        }
-
-        .empty-state i {
-            font-size: 32px;
-            margin-bottom: 8px;
-            color: rgba(255, 255, 255, 0.08);
-            display: block;
-        }
-
-        .empty-state p { font-size: 12px; }
-
-        /* Notification Toast */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: #0c1224;
-            border: 1px solid var(--border-card);
-            padding: 10px 18px;
-            border-radius: 10px;
-            font-size: 12px;
-            font-weight: 600;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-            z-index: 200;
-            transition: transform 0.3s ease;
-            max-width: 90vw;
-        }
-
-        .toast.show { transform: translateX(-50%) translateY(0); }
-        .toast.success { border-color: rgba(0, 255, 136, 0.4); color: var(--accent-green); }
-        .toast.error { border-color: rgba(255, 51, 102, 0.4); color: var(--accent-red); }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#060913">
+<title>TITAN | LEVEL UP BOT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+:root {
+  --bg-base: #060913;
+  --bg-card: rgba(13, 19, 36, 0.78);
+  --bg-card-hover: rgba(19, 27, 50, 0.92);
+  --bg-panel: #0a1020;
+  --border-card: rgba(0, 242, 254, 0.12);
+  --border-hover: rgba(0, 242, 254, 0.45);
+  --border-soft: rgba(255,255,255,0.06);
+  --accent-cyan: #00f2fe;
+  --accent-blue: #4facfe;
+  --accent-purple: #7f00ff;
+  --accent-green: #00ff88;
+  --accent-red: #ff3366;
+  --accent-amber: #ffaa00;
+  --accent-pink: #ff2d95;
+  --text-main: #f0f4fc;
+  --text-muted: #8e9bb5;
+  --text-dim: #5d6b85;
+  --glass-glow: 0 4px 20px 0 rgba(0, 242, 254, 0.08);
+  --radius-lg: 14px;
+  --radius-md: 11px;
+  --radius-sm: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  font-family: 'Outfit', sans-serif;
+  color: var(--text-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body {
+  background-color: #060913;
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(127, 0, 255, 0.16) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(0, 242, 254, 0.12) 0%, transparent 45%),
+    linear-gradient(180deg, #060913 0%, #0a0e1c 100%);
+  padding: 10px;
+  padding-bottom: 30px;
+}
+
+.container { max-width: 1400px; margin: 0 auto; }
+
+/* ========== HEADER ========== */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--glass-glow);
+  margin-bottom: 12px;
+  gap: 10px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.logo-box {
+  width: 38px; height: 38px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; color: #fff;
+  box-shadow: 0 0 18px rgba(255, 45, 149, 0.35);
+  animation: pulse-glow 3s infinite alternate;
+}
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 10px rgba(255, 45, 149, 0.25); }
+  100% { box-shadow: 0 0 22px rgba(127, 0, 255, 0.5); }
+}
+
+.brand-text { min-width: 0; }
+.brand-text h1 {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  background: linear-gradient(90deg, #fff, var(--accent-cyan));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brand-text .sub {
+  font-size: 10.5px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px; margin-top: 2px;
+  white-space: nowrap;
+}
+
+.live-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(0, 255, 136, 0.13);
+  border: 1px solid rgba(0, 255, 136, 0.35);
+  color: var(--accent-green);
+  padding: 2px 7px; border-radius: 11px;
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+}
+.pulse-dot {
+  width: 6px; height: 6px; background: var(--accent-green);
+  border-radius: 50%; animation: blink 1.2s infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 8px 12px;
+  border-radius: 9px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: all 0.22s ease;
+  border: none; outline: none; white-space: nowrap;
+  font-family: inherit;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+  color: #040914;
+  box-shadow: 0 3px 12px rgba(0, 242, 254, 0.25);
+}
+.btn-primary:hover, .btn-primary:active { transform: translateY(-1px); box-shadow: 0 5px 18px rgba(0, 242, 254, 0.4); }
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-card);
+  color: var(--text-main);
+}
+.btn-secondary:hover, .btn-secondary:active { background: rgba(255, 255, 255, 0.1); border-color: var(--border-hover); }
+
+.btn-icon-only {
+  width: 36px; height: 36px; padding: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-card);
+  color: var(--text-main);
+  border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s ease; font-size: 13px;
+}
+.btn-icon-only:hover { background: rgba(0, 242, 254, 0.12); border-color: var(--border-hover); color: var(--accent-cyan); }
+
+/* ========== STATS GRID ========== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
+  backdrop-filter: blur(10px);
+  display: flex; align-items: center; gap: 10px;
+  transition: all 0.3s ease;
+  min-width: 0;
+}
+.stat-card:hover { border-color: var(--border-hover); transform: translateY(-2px); box-shadow: var(--glass-glow); }
+.stat-icon {
+  width: 36px; height: 36px; flex-shrink: 0;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+}
+.stat-icon.cyan { background: rgba(0, 242, 254, 0.15); color: var(--accent-cyan); }
+.stat-icon.green { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
+.stat-icon.purple { background: rgba(127, 0, 255, 0.15); color: #c084fc; }
+.stat-icon.pink { background: rgba(255, 45, 149, 0.15); color: var(--accent-pink); }
+.stat-content { min-width: 0; }
+.stat-content h3 {
+  font-size: 17px; font-weight: 800;
+  letter-spacing: -0.5px; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.stat-content p { font-size: 10.5px; color: var(--text-muted); font-weight: 500; }
+
+/* ========== MAIN LAYOUT ========== */
+.dashboard-main {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 1024px) {
+  .dashboard-main { grid-template-columns: 1.55fr 1fr; }
+}
+
+.card-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 13px;
+  backdrop-filter: blur(12px);
+}
+.box-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; gap: 8px;
+}
+.box-title {
+  font-size: 13.5px; font-weight: 700;
+  display: flex; align-items: center; gap: 7px;
+  min-width: 0;
+}
+.box-title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.box-hint { font-size: 10.5px; color: var(--text-muted); flex-shrink: 0; }
+
+/* ========== ACCOUNT CARDS ========== */
+.accounts-list { display: flex; flex-direction: column; gap: 9px; }
+
+.account-card {
+  background: rgba(10, 15, 30, 0.68);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: 11px 12px;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+.account-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: linear-gradient(180deg, var(--accent-cyan), var(--accent-purple));
+  opacity: 0.7;
+}
+.account-card:hover { background: var(--bg-card-hover); border-color: var(--border-hover); }
+
+.acc-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 9px; gap: 8px;
+}
+.acc-profile { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.acc-avatar {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px;
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0, 242, 254, 0.22);
+}
+.acc-info { min-width: 0; }
+.acc-info h4 {
+  font-size: 12.5px; font-weight: 700; color: #fff;
+  display: flex; align-items: center; gap: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.region-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a5b4fc;
+  padding: 1px 5px; border-radius: 4px;
+  font-size: 9px; font-weight: 700;
+  flex-shrink: 0;
+}
+.acc-info .uid-line {
+  font-size: 10.5px; color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.acc-status {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 12px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.status-online {
+  background: rgba(0, 255, 136, 0.12);
+  color: var(--accent-green);
+  border: 1px solid rgba(0, 255, 136, 0.28);
+}
+.status-match {
+  background: rgba(0, 242, 254, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0, 242, 254, 0.45);
+  animation: pulse-border 1.5s infinite alternate;
+}
+@keyframes pulse-border {
+  0% { border-color: rgba(0, 242, 254, 0.35); }
+  100% { border-color: rgba(0, 242, 254, 0.85); }
+}
+
+.exp-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+.exp-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.exp-label {
+  font-size: 9px; color: var(--text-muted);
+  text-transform: uppercase; font-weight: 600; letter-spacing: 0.3px;
+}
+.exp-val {
+  font-size: 12.5px; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.exp-gained { color: var(--accent-green) !important; }
+.gained-badge {
+  background: rgba(0, 255, 136, 0.16);
+  padding: 1px 5px; border-radius: 4px;
+  font-size: 10.5px; font-weight: 700;
+}
+
+.level-progress { margin-bottom: 8px; }
+.level-labels {
+  display: flex; justify-content: space-between;
+  font-size: 10.5px; margin-bottom: 4px; font-weight: 600;
+}
+.progress-bar-bg {
+  height: 5px; background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px; overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+  border-radius: 8px;
+  transition: width 0.5s ease;
+}
+
+.acc-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10.5px; color: var(--text-muted);
+  gap: 8px;
+}
+.acc-actions > span {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+.action-btns { display: flex; gap: 5px; flex-shrink: 0; }
+.icon-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-card);
+  color: var(--text-muted);
+  width: 28px; height: 28px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s ease; font-size: 11.5px;
+}
+.icon-btn:hover, .icon-btn:active {
+  background: rgba(0, 242, 254, 0.15);
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+.icon-btn.danger:hover, .icon-btn.danger:active {
+  background: rgba(255, 51, 102, 0.15);
+  color: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+/* ========== LIVE LOGS ========== */
+.logs-box { display: flex; flex-direction: column; }
+.log-filters {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  margin-bottom: 9px;
+}
+.filter-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+  padding: 4px 9px;
+  border-radius: 13px;
+  font-size: 10.5px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s ease;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.filter-chip:hover { background: rgba(0, 242, 254, 0.1); color: var(--accent-cyan); }
+.filter-chip.active {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(127, 0, 255, 0.2));
+  color: var(--accent-cyan);
+  border-color: var(--border-hover);
+}
+
+.log-stream {
+  flex: 1;
+  min-height: 320px;
+  max-height: 480px;
+  background: #03060f;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 5px;
+  line-height: 1.35;
+}
+.log-stream::-webkit-scrollbar { width: 5px; }
+.log-stream::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 3px; }
+.log-item { word-break: break-word; }
+.log-time { color: #5d6b85; margin-right: 5px; }
+.log-info { color: #38bdf8; }
+.log-success { color: #4ade80; }
+.log-warning { color: #fbbf24; }
+.log-error { color: #f87171; }
+
+/* ========== MODAL ========== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(3, 6, 15, 0.85);
+  backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+  z-index: 100; padding: 14px;
+}
+.modal-overlay.active { display: flex; }
+
+.modal-card {
+  background: #0c1224;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  width: 100%; max-width: 420px;
+  padding: 18px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+  max-height: 92vh; overflow-y: auto;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.modal-header h3 { font-size: 15px; font-weight: 700; }
+
+.form-group { margin-bottom: 11px; }
+.form-group label {
+  display: block; font-size: 11.5px; font-weight: 600;
+  color: var(--text-muted); margin-bottom: 5px;
+}
+.form-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  color: #fff; font-size: 13px;
+  outline: none; transition: border-color 0.2s;
+  font-family: inherit;
+}
+.form-input:focus { border-color: var(--accent-cyan); }
+textarea.form-input { resize: vertical; min-height: 70px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+select.form-input { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e9bb5' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
+
+.empty-state { text-align: center; padding: 28px 14px; color: var(--text-muted); }
+.empty-state i { font-size: 32px; margin-bottom: 9px; color: rgba(255, 255, 255, 0.1); display: block; }
+.empty-state p { font-size: 12.5px; }
+
+/* ========== SECTION HEADING ========== */
+.section-heading {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 16px 0 10px;
+  font-size: 14px; font-weight: 700;
+  color: #fff;
+  gap: 10px;
+}
+.section-heading .count-badge {
+  background: rgba(0, 242, 254, 0.12);
+  color: var(--accent-cyan);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ========== MOBILE TWEAKS ========== */
+@media (max-width: 640px) {
+  body { padding: 8px; }
+  header { padding: 9px 11px; border-radius: 12px; gap: 8px; }
+  .brand-text h1 { font-size: 12px; }
+  .brand-text .sub { font-size: 10px; }
+  .logo-box { width: 34px; height: 34px; font-size: 15px; }
+  .header-actions { gap: 5px; }
+  .btn { padding: 7px 10px; font-size: 11.5px; }
+  .btn-icon-only { width: 34px; height: 34px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 10px; gap: 8px; }
+  .stat-icon { width: 32px; height: 32px; font-size: 13px; }
+  .stat-content h3 { font-size: 15px; }
+  .stat-content p { font-size: 10px; }
+  .card-box { padding: 11px; border-radius: 12px; }
+  .log-stream { min-height: 260px; max-height: 380px; font-size: 10px; }
+}
+
+@media (max-width: 380px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .exp-box { grid-template-columns: 1fr 1fr; }
+  .exp-item:nth-child(3) { grid-column: span 2; }
+}
+</style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header>
-            <div class="brand">
-                <div class="logo-box"><i class="fa-solid fa-bolt"></i></div>
-                <div class="brand-text">
-                    <h1>TITAN | LEVEL UP BOT</h1>
-                    <p>
-                        <span class="live-tag"><span class="pulse-dot"></span> Live</span>
-                        <span>• Parallel Multi-Match</span>
-                    </p>
-                </div>
-            </div>
-            <div class="header-actions">
-                <button class="btn btn-secondary" onclick="manualCleanup()" title="Remove stuck accounts"><i class="fa-solid fa-broom"></i> <span style="display:none;" class="btn-label">Cleanup</span></button>
-                <button class="btn btn-secondary" onclick="fetchStats(true)"><i class="fa-solid fa-rotate"></i> <span style="display:none;" class="btn-label">Refresh</span></button>
-                <button class="btn btn-primary" onclick="openAddModal()"><i class="fa-solid fa-plus"></i> Add</button>
-            </div>
-        </header>
+<div class="container">
 
-        <!-- Stats -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon cyan"><i class="fa-solid fa-users"></i></div>
-                <div class="stat-content">
-                    <h3 id="stat-total-accounts">0</h3>
-                    <p>Active Accounts</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon green"><i class="fa-solid fa-angles-up"></i></div>
-                <div class="stat-content">
-                    <h3 id="stat-total-exp" style="color:var(--accent-green)">+0</h3>
-                    <p>Total EXP Gained</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon purple"><i class="fa-solid fa-gamepad"></i></div>
-                <div class="stat-content">
-                    <h3 id="stat-total-matches">0</h3>
-                    <p>Matches Done</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon amber"><i class="fa-solid fa-shield-halved"></i></div>
-                <div class="stat-content">
-                    <h3 id="stat-uptime">00:00:00</h3>
-                    <p>Bot Uptime</p>
-                </div>
-            </div>
+  <!-- HEADER -->
+  <header>
+    <div class="brand">
+      <div class="logo-box"><i class="fa-solid fa-bolt"></i></div>
+      <div class="brand-text">
+        <h1>TITAN | LEVEL UP BOT</h1>
+        <p class="sub">
+          <span class="live-tag"><span class="pulse-dot"></span> LIVE</span>
+          <span>• Parallel Multi-Match</span>
+        </p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon-only" onclick="fetchStats()" title="Refresh">
+        <i class="fa-solid fa-rotate"></i>
+      </button>
+      <button class="btn btn-primary" onclick="openAddModal()">
+        <i class="fa-solid fa-plus"></i> <span>Add</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon cyan"><i class="fa-solid fa-users"></i></div>
+      <div class="stat-content">
+        <h3 id="stat-total-accounts">0</h3>
+        <p>Active Accounts</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i class="fa-solid fa-angles-up"></i></div>
+      <div class="stat-content">
+        <h3 id="stat-total-exp" style="color:var(--accent-green)">+0</h3>
+        <p>Total EXP Gained</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i class="fa-solid fa-gamepad"></i></div>
+      <div class="stat-content">
+        <h3 id="stat-total-matches">0</h3>
+        <p>Matches Done</p>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon pink"><i class="fa-solid fa-clock"></i></div>
+      <div class="stat-content">
+        <h3 id="stat-uptime">00:00:00</h3>
+        <p>Bot Uptime</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="dashboard-main">
+
+    <!-- ACCOUNTS -->
+    <div class="card-box">
+      <div class="box-header">
+        <div class="box-title">
+          <i class="fa-solid fa-user-astronaut" style="color:var(--accent-cyan)"></i>
+          <span>Live Accounts</span>
         </div>
-
-        <!-- Main Dashboard -->
-        <div class="dashboard-main">
-            <!-- Live Accounts -->
-            <div class="card-box">
-                <div class="box-header">
-                    <div class="box-title">
-                        <i class="fa-solid fa-user-astronaut" style="color:var(--accent-cyan)"></i>
-                        <span>Live Accounts</span>
-                    </div>
-                    <span style="font-size:10px; color:var(--text-muted);" id="live-count-label">0 running</span>
-                </div>
-                <div class="accounts-list" id="accounts-container">
-                    <div class="empty-state">
-                        <i class="fa-solid fa-circle-notch fa-spin"></i>
-                        <p>Loading...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Live Logs -->
-            <div class="card-box logs-box">
-                <div class="box-header">
-                    <div class="box-title">
-                        <i class="fa-solid fa-terminal" style="color:var(--accent-green)"></i>
-                        <span>Live Logs</span>
-                    </div>
-                    <span style="font-size:10px; color:var(--text-muted);">Real-time</span>
-                </div>
-                <div class="log-tabs" id="log-tabs">
-                    <div class="log-tab active" data-tab="all" onclick="switchLogTab('all')">
-                        <i class="fa-solid fa-layer-group"></i> All <span class="tab-count" id="count-all">0</span>
-                    </div>
-                    <div class="log-tab" data-tab="match" onclick="switchLogTab('match')">
-                        <i class="fa-solid fa-gamepad"></i> Match <span class="tab-count" id="count-match">0</span>
-                    </div>
-                    <div class="log-tab" data-tab="connection" onclick="switchLogTab('connection')">
-                        <i class="fa-solid fa-link"></i> Conn <span class="tab-count" id="count-connection">0</span>
-                    </div>
-                    <div class="log-tab" data-tab="exp" onclick="switchLogTab('exp')">
-                        <i class="fa-solid fa-star"></i> EXP <span class="tab-count" id="count-exp">0</span>
-                    </div>
-                    <div class="log-tab" data-tab="system" onclick="switchLogTab('system')">
-                        <i class="fa-solid fa-gear"></i> Sys <span class="tab-count" id="count-system">0</span>
-                    </div>
-                </div>
-                <div class="log-stream" id="log-stream">
-                    <div class="log-empty">Waiting for logs...</div>
-                </div>
-            </div>
+        <span class="box-hint" id="acc-hint">0 running</span>
+      </div>
+      <div class="accounts-list" id="accounts-container">
+        <div class="empty-state">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+          <p>Loading accounts...</p>
         </div>
-
-        <!-- Account Management -->
-        <div class="card-box mgmt-section">
-            <div class="box-header">
-                <div class="box-title">
-                    <i class="fa-solid fa-list-check" style="color:var(--accent-purple)"></i>
-                    <span>Account Management</span>
-                </div>
-                <span style="font-size:10px; color:var(--text-muted);" id="mgmt-total-count">0 total</span>
-            </div>
-            <div class="mgmt-tabs">
-                <div class="mgmt-tab active" data-mgmt="active" onclick="switchMgmtTab('active')">
-                    <i class="fa-solid fa-circle" style="color:var(--accent-green); font-size:7px;"></i> Active <span class="count" id="mgmt-active-count">0</span>
-                </div>
-                <div class="mgmt-tab" data-mgmt="pending" onclick="switchMgmtTab('pending')">
-                    <i class="fa-solid fa-clock" style="color:var(--accent-cyan); font-size:7px;"></i> Pending <span class="count" id="mgmt-pending-count">0</span>
-                </div>
-                <div class="mgmt-tab" data-mgmt="inactive" onclick="switchMgmtTab('inactive')">
-                    <i class="fa-solid fa-pause" style="color:var(--accent-amber); font-size:7px;"></i> Inactive <span class="count" id="mgmt-inactive-count">0</span>
-                </div>
-                <div class="mgmt-tab" data-mgmt="all" onclick="switchMgmtTab('all')">
-                    <i class="fa-solid fa-layer-group" style="color:var(--text-muted); font-size:7px;"></i> All <span class="count" id="mgmt-all-count">0</span>
-                </div>
-            </div>
-            <div class="mgmt-list" id="mgmt-container">
-                <div class="empty-state">
-                    <i class="fa-solid fa-inbox"></i>
-                    <p>No accounts added yet.</p>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
 
-    <!-- Add Account Modal -->
-    <div class="modal-overlay" id="add-modal">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3><i class="fa-solid fa-user-plus" style="color:var(--accent-cyan); margin-right:6px;"></i> Add Account</h3>
-                <button class="icon-btn" onclick="closeAddModal()"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <form id="add-acc-form" onsubmit="submitAddAccount(event)">
-                <div class="form-group">
-                    <label>Account Type</label>
-                    <select class="form-input" id="acc-type" onchange="toggleFormType()">
-                        <option value="guest">Guest (UID + Password)</option>
-                        <option value="token">Access Token</option>
-                    </select>
-                </div>
-                <div id="guest-fields">
-                    <div class="form-group">
-                        <label>Guest UID</label>
-                        <input type="text" class="form-input" id="acc-uid" placeholder="e.g. 7644913583">
-                    </div>
-                    <div class="form-group">
-                        <label>Guest Password</label>
-                        <input type="text" class="form-input" id="acc-password" placeholder="e.g. ZERO_GRAVITY_4NM38">
-                    </div>
-                </div>
-                <div id="token-fields" style="display:none;">
-                    <div class="form-group">
-                        <label>Access Token</label>
-                        <textarea class="form-input" id="acc-token" rows="3" placeholder="Paste access token..."></textarea>
-                    </div>
-                </div>
-                <div style="display:flex; gap:8px; margin-top:16px;">
-                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Save & Start</button>
-                </div>
-            </form>
+    <!-- LOGS -->
+    <div class="card-box logs-box">
+      <div class="box-header">
+        <div class="box-title">
+          <i class="fa-solid fa-terminal" style="color:var(--accent-green)"></i>
+          <span>Live Logs</span>
         </div>
+        <span class="box-hint">Real-time</span>
+      </div>
+      <div class="log-filters" id="log-filters">
+        <button class="filter-chip active" data-filter="all" onclick="setLogFilter('all', this)">
+          <i class="fa-solid fa-list"></i> All
+        </button>
+        <button class="filter-chip" data-filter="match" onclick="setLogFilter('match', this)">
+          <i class="fa-solid fa-gamepad"></i> Match
+        </button>
+        <button class="filter-chip" data-filter="conn" onclick="setLogFilter('conn', this)">
+          <i class="fa-solid fa-wifi"></i> Conn
+        </button>
+        <button class="filter-chip" data-filter="exp" onclick="setLogFilter('exp', this)">
+          <i class="fa-solid fa-star"></i> EXP
+        </button>
+        <button class="filter-chip" data-filter="sys" onclick="setLogFilter('sys', this)">
+          <i class="fa-solid fa-gear"></i> Sys
+        </button>
+      </div>
+      <div class="log-stream" id="log-stream"></div>
     </div>
+  </div>
 
-    <div class="toast" id="toast"></div>
+  <!-- SECTION: account management -->
+  <div class="section-heading">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <i class="fa-solid fa-sliders" style="color:var(--accent-purple)"></i>
+      <span>Account Management</span>
+    </div>
+    <span class="count-badge" id="mgr-count">0 total</span>
+  </div>
+  <div class="card-box">
+    <div class="accounts-list" id="management-container">
+      <div class="empty-state">
+        <i class="fa-solid fa-folder-open"></i>
+        <p>No managed accounts</p>
+      </div>
+    </div>
+  </div>
+</div>
 
-    <script>
-        let currentLogTab = 'all';
-        let currentMgmtTab = 'active';
-        let allAccounts = [];
-        let allLogs = [];
+<!-- ADD MODAL -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3><i class="fa-solid fa-user-plus" style="color:var(--accent-cyan); margin-right:6px;"></i> Add New Account</h3>
+      <button class="icon-btn" onclick="closeAddModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form id="add-acc-form" onsubmit="submitAddAccount(event)">
+      <div class="form-group">
+        <label>Account Type</label>
+        <select class="form-input" id="acc-type" onchange="toggleFormType()">
+          <option value="guest">Guest Account (UID + Password)</option>
+          <option value="token">Access Token</option>
+        </select>
+      </div>
+      <div id="guest-fields">
+        <div class="form-group">
+          <label>Guest UID</label>
+          <input type="text" class="form-input" id="acc-uid" placeholder="e.g. 7644913583">
+        </div>
+        <div class="form-group">
+          <label>Guest Password / Secret</label>
+          <input type="text" class="form-input" id="acc-password" placeholder="e.g. ZERO_GRAVITY_4NM38">
+        </div>
+      </div>
+      <div id="token-fields" style="display:none;">
+        <div class="form-group">
+          <label>Access Token</label>
+          <textarea class="form-input" id="acc-token" rows="3" placeholder="Paste access token here..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Save &amp; Start</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-        function showToast(msg, type = 'success') {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.className = 'toast show ' + type;
-            setTimeout(() => { t.className = 'toast ' + type; }, 3000);
-        }
+<script>
+/* ============================================================
+   UPTIME FIX
+   ------------------------------------------------------------
+   The bot uptime is stored on the SERVER (bot_state.start_time)
+   and exposed via /api/stats as data.uptime (seconds since
+   backend started).
+   
+   We cache it locally and tick forward between polls using
+   performance.now() (monotonic — unaffected by page refresh).
+   ============================================================ */
+let serverUptime = 0;          // seconds, from backend
+let lastUptimeSync = 0;        // performance.now() at last sync
+let uptimeSyncReceived = false; // has the server responded at least once?
 
-        function openAddModal() { document.getElementById('add-modal').classList.add('active'); }
-        function closeAddModal() { document.getElementById('add-modal').classList.remove('active'); }
+let currentLogFilter = 'all';
 
-        function toggleFormType() {
-            const type = document.getElementById('acc-type').value;
-            document.getElementById('guest-fields').style.display = type === 'guest' ? 'block' : 'none';
-            document.getElementById('token-fields').style.display = type === 'token' ? 'block' : 'none';
-        }
+function openAddModal() { document.getElementById('add-modal').classList.add('active'); }
+function closeAddModal() { document.getElementById('add-modal').classList.remove('active'); }
 
-        async function submitAddAccount(e) {
-            e.preventDefault();
-            const type = document.getElementById('acc-type').value;
-            let payload = {};
-            if (type === 'guest') {
-                const uid = document.getElementById('acc-uid').value.trim();
-                const password = document.getElementById('acc-password').value.trim();
-                if (!uid || !password) return showToast('Enter UID and Password', 'error');
-                payload = { uid, password };
-            } else {
-                const token = document.getElementById('acc-token').value.trim();
-                if (!token) return showToast('Enter token', 'error');
-                payload = { token };
-            }
+function toggleFormType() {
+  const t = document.getElementById('acc-type').value;
+  document.getElementById('guest-fields').style.display = t === 'guest' ? 'block' : 'none';
+  document.getElementById('token-fields').style.display = t === 'token' ? 'block' : 'none';
+}
 
-            try {
-                const res = await fetch('/api/account/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                if (data.status === 'ok') {
-                    closeAddModal();
-                    document.getElementById('add-acc-form').reset();
-                    showToast('Account added! Starting...', 'success');
-                    fetchStats();
-                } else {
-                    showToast('Error: ' + (data.error || 'Unknown'), 'error');
-                }
-            } catch (err) {
-                showToast('Request failed', 'error');
-            }
-        }
+function setLogFilter(filter, el) {
+  currentLogFilter = filter;
+  document.querySelectorAll('#log-filters .filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  fetchStats();
+}
 
-        async function deleteAccount(uid) {
-            if (!confirm('Delete account ' + uid + '?\nThis removes it from accounts.json + token_cache.json + devices.json permanently.')) return;
+function logCategory(log) {
+  const m = (log.message || '').toLowerCase();
+  if (m.includes('match') || m.includes('thunder') || m.includes('sharma') || m.includes('lone wolf')) return 'match';
+  if (m.includes('http') || m.includes('connect') || m.includes('tcp') || m.includes('udp') || m.includes('dns')) return 'conn';
+  if (m.includes('exp') || m.includes('level') || m.includes('gained')) return 'exp';
+  return 'sys';
+}
 
-            // Gather ALL identifiers we know about for this account
-            const acc = allAccounts.find(a => a.uid === uid) || {};
-            const extraIds = [];
-            if (acc.uid) extraIds.push(acc.uid);
-            if (acc.account_id) extraIds.push(acc.account_id);
-            if (acc.auth_uid) extraIds.push(acc.auth_uid);
-            if (acc.open_id) extraIds.push(acc.open_id);
+async function submitAddAccount(e) {
+  e.preventDefault();
+  const type = document.getElementById('acc-type').value;
+  let payload = {};
+  if (type === 'guest') {
+    const uid = document.getElementById('acc-uid').value.trim();
+    const password = document.getElementById('acc-password').value.trim();
+    if (!uid || !password) return alert('Please enter both UID and Password');
+    payload = { uid, password };
+  } else {
+    const token = document.getElementById('acc-token').value.trim();
+    if (!token) return alert('Please enter token');
+    payload = { token };
+  }
+  try {
+    const res = await fetch('/api/account/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      closeAddModal();
+      document.getElementById('add-acc-form').reset();
+      toggleFormType();
+      fetchStats();
+    } else {
+      alert('Error: ' + (data.error || 'Unknown'));
+    }
+  } catch (err) { alert('Request failed: ' + err); }
+}
 
-            try {
-                const res = await fetch('/api/account/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ uid, extra_ids: extraIds })
-                });
-                const data = await res.json();
-                if (data.status === 'ok') {
-                    showToast('Account deleted from all storage', 'success');
-                    fetchStats();
-                }
-            } catch (err) { showToast('Delete failed', 'error'); }
-        }
+async function deleteAccount(uid) {
+  if (!confirm('Permanently remove account ' + uid + '?\nThis will cancel its worker, purge token cache and device mapping.')) return;
+  try {
+    const res = await fetch('/api/account/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid })
+    });
+    const data = await res.json();
+    if (data.status !== 'ok') {
+      alert('Delete failed: ' + (data.error || 'Unknown'));
+    }
+    fetchStats();
+  } catch (err) { console.error(err); alert('Delete request failed'); }
+}
 
-        async function pauseAccount(uid) {
-            try {
-                await fetch('/api/account/pause', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ uid })
-                });
-                showToast('Account paused', 'success');
-                fetchStats();
-            } catch (err) { showToast('Pause failed', 'error'); }
-        }
+async function refreshAccountInfo(uid) {
+  try {
+    await fetch('/api/account/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid })
+    });
+    fetchStats();
+  } catch (err) { console.error(err); }
+}
 
-        async function resumeAccount(uid) {
-            try {
-                await fetch('/api/account/resume', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ uid })
-                });
-                showToast('Account resumed', 'success');
-                fetchStats();
-            } catch (err) { showToast('Resume failed', 'error'); }
-        }
+function renderAccountCard(acc, compact) {
+  const gainedExp = acc.gained_exp || 0;
+  const statusClass = acc.status === 'IN_MATCH' ? 'status-match' : 'status-online';
+  const statusText = acc.status === 'IN_MATCH' ? `In Match (${acc.active_matches || 0})` : acc.status;
+  const initialExp = (acc.initial_exp || 0).toLocaleString();
+  const currentExp = (acc.current_exp || 0).toLocaleString();
+  const pct = Math.min(100, Math.max(8, ((acc.current_exp || 0) % 1000) / 10));
+  const initial = (acc.nickname || 'P').trim().charAt(0).toUpperCase();
 
-        async function refreshAccountInfo(uid) {
-            try {
-                await fetch('/api/account/refresh', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ uid })
-                });
-                showToast('Refreshed', 'success');
-                fetchStats();
-            } catch (err) { showToast('Refresh failed', 'error'); }
-        }
+  if (compact) {
+    return `
+      <div class="account-card" style="padding:9px 11px;">
+        <div class="acc-top" style="margin-bottom:0;">
+          <div class="acc-profile">
+            <div class="acc-avatar" style="width:30px;height:30px;font-size:12px;">${escapeHtml(initial)}</div>
+            <div class="acc-info">
+              <h4>${escapeHtml(acc.nickname)} <span class="region-badge">${escapeHtml(acc.region || 'BD')}</span></h4>
+              <span class="uid-line">UID: ${escapeHtml(acc.uid)} • Lvl ${acc.level} • +${gainedExp.toLocaleString()} EXP</span>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="acc-status ${statusClass}">
+              <span class="pulse-dot"></span><span>${escapeHtml(statusText)}</span>
+            </div>
+            <div class="action-btns">
+              <button class="icon-btn" title="Refresh" onclick="refreshAccountInfo('${acc.uid}')"><i class="fa-solid fa-rotate"></i></button>
+              <button class="icon-btn danger" title="Delete" onclick="deleteAccount('${acc.uid}')"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
-        async function manualCleanup() {
-            if (!confirm('Remove all stuck accounts (no match in 5+ min)?')) return;
-            try {
-                const res = await fetch('/api/cleanup/stuck', { method: 'POST' });
-                const data = await res.json();
-                if (data.removed && data.removed.length > 0) {
-                    showToast('Removed ' + data.removed.length + ' stuck accounts', 'success');
-                } else {
-                    showToast('No stuck accounts found', 'success');
-                }
-                fetchStats();
-            } catch (err) { showToast('Cleanup failed', 'error'); }
-        }
+  return `
+    <div class="account-card">
+      <div class="acc-top">
+        <div class="acc-profile">
+          <div class="acc-avatar">${escapeHtml(initial)}</div>
+          <div class="acc-info">
+            <h4>${escapeHtml(acc.nickname)} <span class="region-badge">${escapeHtml(acc.region || 'BD')}</span></h4>
+            <span class="uid-line">UID: ${escapeHtml(acc.uid)}</span>
+          </div>
+        </div>
+        <div class="acc-status ${statusClass}">
+          <span class="pulse-dot"></span><span>${escapeHtml(statusText)}</span>
+        </div>
+      </div>
 
-        function switchLogTab(tab) {
-            currentLogTab = tab;
-            document.querySelectorAll('.log-tab').forEach(el => {
-                el.classList.toggle('active', el.dataset.tab === tab);
-            });
-            renderLogs();
-        }
+      <div class="exp-box">
+        <div class="exp-item">
+          <span class="exp-label">Initial</span>
+          <span class="exp-val">${initialExp}</span>
+        </div>
+        <div class="exp-item">
+          <span class="exp-label">Current</span>
+          <span class="exp-val">${currentExp}</span>
+        </div>
+        <div class="exp-item">
+          <span class="exp-label">Gained</span>
+          <span class="exp-val exp-gained"><span class="gained-badge">+${gainedExp.toLocaleString()}</span></span>
+        </div>
+      </div>
 
-        function switchMgmtTab(tab) {
-            currentMgmtTab = tab;
-            document.querySelectorAll('.mgmt-tab').forEach(el => {
-                el.classList.toggle('active', el.dataset.mgmt === tab);
-            });
-            renderManagement();
-        }
+      <div class="level-progress">
+        <div class="level-labels">
+          <span style="color:var(--accent-cyan)">Level ${acc.level}</span>
+          <span style="color:var(--text-muted)">Matches: ${acc.matches_played || 0}</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
 
-        function renderLogs() {
-            const logContainer = document.getElementById('log-stream');
-            let logs = allLogs;
-            if (currentLogTab !== 'all') {
-                logs = logs.filter(l => l.category === currentLogTab);
-            }
-            if (logs.length === 0) {
-                logContainer.innerHTML = '<div class="log-empty">No ' + (currentLogTab === 'all' ? '' : currentLogTab + ' ') + 'logs yet...</div>';
-                return;
-            }
-            logContainer.innerHTML = logs.map(log => {
-                return `<div class="log-item"><span class="log-time">[${log.time}]</span><span class="log-${log.level}">${escapeHtml(log.message)}</span></div>`;
-            }).join('');
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
+      <div class="acc-actions">
+        <span>Last: ${acc.last_match_time || 'Running...'}</span>
+        <div class="action-btns">
+          <button class="icon-btn" title="Refresh" onclick="refreshAccountInfo('${acc.uid}')"><i class="fa-solid fa-rotate"></i></button>
+          <button class="icon-btn danger" title="Delete" onclick="deleteAccount('${acc.uid}')"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
-        function getStatusClass(status) {
-            if (status === 'IN_MATCH') return 'status-match';
-            if (status === 'SEARCHING') return 'status-searching';
-            if (status === 'PAUSED') return 'status-paused';
-            if (status === 'ERROR') return 'status-error';
-            if (status === 'CONNECTING') return 'status-connecting';
-            if (status === 'PENDING') return 'status-pending';
-            if (status === 'ONLINE') return 'status-online';
-            return 'status-online';
-        }
+async function fetchStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const data = await res.json();
 
-        function getStatusText(acc) {
-            if (acc.status === 'IN_MATCH') return `In Match (${acc.active_matches || 1})`;
-            if (acc.status === 'SEARCHING') return 'Searching';
-            return acc.status;
-        }
+    /* ==========================================================
+       ✅ UPTIME SYNC — pull the true server uptime on every poll.
+       This is what makes the timer survive page refreshes.
+       ========================================================== */
+    if (typeof data.uptime === 'number' && data.uptime >= 0) {
+      serverUptime = data.uptime;
+      lastUptimeSync = performance.now();
+      uptimeSyncReceived = true;
+      // Immediately repaint so we don't wait for the 1s tick
+      tickUptime();
+    }
 
-        function renderLiveAccounts() {
-            const container = document.getElementById('accounts-container');
-            const live = allAccounts.filter(a =>
-                !['PAUSED', 'OFFLINE', 'ERROR'].includes(a.status)
-            );
+    document.getElementById('stat-total-accounts').innerText = data.total_accounts;
+    document.getElementById('stat-total-exp').innerText = '+' + (data.total_gained_exp || 0).toLocaleString();
+    document.getElementById('stat-total-matches').innerText = data.total_matches;
+    document.getElementById('acc-hint').innerText = data.total_accounts + ' running';
+    document.getElementById('mgr-count').innerText = data.total_accounts + ' total';
 
-            document.getElementById('live-count-label').innerText = live.length + ' running';
+    const container = document.getElementById('accounts-container');
+    if (!data.accounts || data.accounts.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="fa-solid fa-ghost"></i>
+          <p>No active accounts. Tap "+ Add" to start!</p>
+        </div>`;
+    } else {
+      container.innerHTML = data.accounts.map(a => renderAccountCard(a, false)).join('');
+    }
 
-            if (live.length === 0) {
-                container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-ghost"></i><p>No live accounts. Add or resume from management below.</p></div>';
-                return;
-            }
+    const mgr = document.getElementById('management-container');
+    if (!data.accounts || data.accounts.length === 0) {
+      mgr.innerHTML = `
+        <div class="empty-state">
+          <i class="fa-solid fa-folder-open"></i>
+          <p>No managed accounts</p>
+        </div>`;
+    } else {
+      mgr.innerHTML = data.accounts.map(a => renderAccountCard(a, true)).join('');
+    }
 
-            container.innerHTML = live.map(acc => {
-                const gainedExp = acc.gained_exp || 0;
-                const statusClass = getStatusClass(acc.status);
-                const isPending = acc._pending === true || acc.status === 'CONNECTING';
-                const statusText = isPending ? 'Connecting...' : getStatusText(acc);
+    const logContainer = document.getElementById('log-stream');
+    let logs = data.logs || [];
+    if (currentLogFilter !== 'all') {
+      logs = logs.filter(l => logCategory(l) === currentLogFilter);
+    }
+    logContainer.innerHTML = logs.map(l =>
+      `<div class="log-item"><span class="log-time">[${escapeHtml(l.time)}]</span><span class="log-${escapeHtml(l.level)}">${escapeHtml(l.message)}</span></div>`
+    ).join('') || '<div style="color:var(--text-dim); text-align:center; padding:20px;">No logs for this filter</div>';
+    logContainer.scrollTop = logContainer.scrollHeight;
 
-                return `
-                    <div class="account-card">
-                        <div class="acc-top">
-                            <div class="acc-profile">
-                                <div class="acc-avatar"><i class="fa-solid fa-user"></i></div>
-                                <div class="acc-info">
-                                    <h4>${escapeHtml(acc.nickname)} <span class="region-badge">${acc.region || 'BD'}</span></h4>
-                                    <span>UID: ${acc.uid}</span>
-                                </div>
-                            </div>
-                            <div class="acc-status ${statusClass}">
-                                ${acc.status === 'IN_MATCH' || acc.status === 'SEARCHING' ? '<span class="pulse-dot"></span>' : ''}
-                                <span>${statusText}</span>
-                            </div>
-                        </div>
-                        <div class="exp-box">
-                            <div class="exp-item">
-                                <span class="exp-label">Initial</span>
-                                <span class="exp-val">${(acc.initial_exp || 0).toLocaleString()}</span>
-                            </div>
-                            <div class="exp-item">
-                                <span class="exp-label">Current</span>
-                                <span class="exp-val">${(acc.current_exp || 0).toLocaleString()}</span>
-                            </div>
-                            <div class="exp-item">
-                                <span class="exp-label">Gained</span>
-                                <span class="exp-val exp-gained">+${gainedExp.toLocaleString()}</span>
-                            </div>
-                        </div>
-                        <div class="level-progress">
-                            <div class="level-labels">
-                                <span style="color:var(--accent-cyan)">Level ${acc.level || 1}</span>
-                                <span style="color:var(--text-muted)">Matches: ${acc.matches_played || 0}</span>
-                            </div>
-                            <div class="progress-bar-bg">
-                                <div class="progress-bar-fill" style="width: ${Math.min(100, Math.max(15, ((acc.current_exp || 0) % 1000) / 10))}%"></div>
-                            </div>
-                        </div>
-                        <div class="acc-actions">
-                            <span>Last: ${acc.last_match_time || (isPending ? 'Connecting...' : 'Running...')}</span>
-                            <div class="action-btns">
-                                <button class="icon-btn" title="Refresh EXP" onclick="refreshAccountInfo('${acc.uid}')"><i class="fa-solid fa-rotate"></i></button>
-                                ${isPending ? '' :
-                                    `<button class="icon-btn warning" title="Pause" onclick="pauseAccount('${acc.uid}')"><i class="fa-solid fa-pause"></i></button>`
-                                }
-                                <button class="icon-btn danger" title="Delete" onclick="deleteAccount('${acc.uid}')"><i class="fa-solid fa-trash"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
+  } catch (err) {
+    console.error("fetchStats failed:", err);
+  }
+}
 
-        function renderManagement() {
-            const container = document.getElementById('mgmt-container');
-            let filtered = allAccounts;
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
-            if (currentMgmtTab === 'active') {
-                filtered = allAccounts.filter(a =>
-                    ['ONLINE','IN_MATCH','SEARCHING','CONNECTING'].includes(a.status)
-                );
-            } else if (currentMgmtTab === 'pending') {
-                filtered = allAccounts.filter(a =>
-                    a.status === 'CONNECTING' || a.status === 'PENDING'
-                );
-            } else if (currentMgmtTab === 'inactive') {
-                filtered = allAccounts.filter(a =>
-                    ['PAUSED','ERROR','OFFLINE'].includes(a.status)
-                );
-            }
-            // currentMgmtTab === 'all' → show EVERYTHING (no filter)
+/* ============================================================
+   UPTIME TICKER
+   ------------------------------------------------------------
+   Runs every second. Uses serverUptime as the base value and
+   adds the elapsed real time since the last sync. This makes
+   the timer keep counting smoothly between 2.5s API polls and
+   — critically — survives page refreshes.
+   ============================================================ */
+function formatUptime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+  const s = String(sec % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
 
-            const counts = {
-                all: allAccounts.length,
-                active: allAccounts.filter(a => ['ONLINE','IN_MATCH','SEARCHING','CONNECTING'].includes(a.status)).length,
-                pending: allAccounts.filter(a => a.status === 'CONNECTING' || a.status === 'PENDING').length,
-                inactive: allAccounts.filter(a => ['PAUSED','ERROR','OFFLINE'].includes(a.status)).length,
-            };
+function tickUptime() {
+  if (!uptimeSyncReceived) {
+    // First paint before server responds — show placeholder
+    return;
+  }
+  const elapsed = (performance.now() - lastUptimeSync) / 1000;
+  const sec = serverUptime + elapsed;
+  document.getElementById('stat-uptime').innerText = formatUptime(sec);
+}
 
-            document.getElementById('mgmt-active-count').innerText = counts.active;
-            document.getElementById('mgmt-pending-count').innerText = counts.pending;
-            document.getElementById('mgmt-inactive-count').innerText = counts.inactive;
-            document.getElementById('mgmt-all-count').innerText = counts.all;
-            document.getElementById('mgmt-total-count').innerText = counts.all + ' total';
+setInterval(tickUptime, 1000);
 
-            if (filtered.length === 0) {
-                container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-inbox"></i><p>No ' + currentMgmtTab + ' accounts.</p></div>';
-                return;
-            }
+/* Immediate first fetch + periodic polling */
+fetchStats();
+setInterval(fetchStats, 2500);
 
-            container.innerHTML = filtered.map(acc => {
-                const isPaused = acc.status === 'PAUSED';
-                const isPending = acc._pending === true || acc.status === 'CONNECTING' || acc.status === 'PENDING';
-                const statusClass = getStatusClass(acc.status);
-                const statusText = isPending ? 'Connecting...' : getStatusText(acc);
-                const region = acc.region || 'BD';
-
-                return `
-                    <div class="mgmt-item">
-                        <div class="mgmt-item-left">
-                            <div class="mgmt-avatar"><i class="fa-solid fa-user"></i></div>
-                            <div class="mgmt-item-info">
-                                <h5>${escapeHtml(acc.nickname)} <span class="region-badge">${region}</span></h5>
-                                <span>UID: ${acc.uid} • Lvl ${acc.level || 1} • +${(acc.gained_exp||0).toLocaleString()} EXP</span>
-                            </div>
-                        </div>
-                        <div class="mgmt-item-right">
-                            <span class="acc-status ${statusClass}" style="font-size:9px;">${statusText}</span>
-                            <button class="icon-btn" title="Refresh" onclick="refreshAccountInfo('${acc.uid}')"><i class="fa-solid fa-rotate"></i></button>
-                            ${isPending ? '' : (isPaused ?
-                                `<button class="icon-btn success" title="Resume" onclick="resumeAccount('${acc.uid}')"><i class="fa-solid fa-play"></i></button>` :
-                                `<button class="icon-btn warning" title="Pause" onclick="pauseAccount('${acc.uid}')"><i class="fa-solid fa-pause"></i></button>`
-                            )}
-                            <button class="icon-btn danger" title="Delete" onclick="deleteAccount('${acc.uid}')"><i class="fa-solid fa-trash"></i></button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        async function fetchStats() {
-            try {
-                const res = await fetch('/api/stats');
-                const data = await res.json();
-
-                document.getElementById('stat-total-accounts').innerText = data.total_accounts;
-                document.getElementById('stat-total-exp').innerText = '+' + (data.total_gained_exp || 0).toLocaleString();
-                document.getElementById('stat-total-matches').innerText = data.total_matches;
-
-                allAccounts = data.accounts || [];
-                allLogs = data.logs || [];
-
-                // Update log tab counts
-                const counts = { all: allLogs.length, match: 0, connection: 0, exp: 0, system: 0 };
-                allLogs.forEach(l => { if (counts[l.category] !== undefined) counts[l.category]++; });
-                document.getElementById('count-all').innerText = counts.all;
-                document.getElementById('count-match').innerText = counts.match;
-                document.getElementById('count-connection').innerText = counts.connection;
-                document.getElementById('count-exp').innerText = counts.exp;
-                document.getElementById('count-system').innerText = counts.system;
-
-                renderLiveAccounts();
-                renderLogs();
-                renderManagement();
-
-                if (data.uptime !== undefined) {
-                    const sec = data.uptime;
-                    const h = String(Math.floor(sec / 3600)).padStart(2, '0');
-                    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
-                    const s = String(sec % 60).padStart(2, '0');
-                    document.getElementById('stat-uptime').innerText = `${h}:${m}:${s}`;
-                }
-
-            } catch (err) {
-                console.error("Failed to fetch stats:", err);
-            }
-        }
-
-        function escapeHtml(text) {
-            if (!text) return '';
-            return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
-
-        fetchStats();
-        setInterval(fetchStats, 2500);
-    </script>
+/* Also re-sync as soon as the tab becomes visible again
+   (mobile browsers pause timers when backgrounded). */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    fetchStats();
+  }
+});
+</script>
 </body>
 </html>
