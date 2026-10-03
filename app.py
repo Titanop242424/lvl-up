@@ -10,7 +10,6 @@ import time
 import os
 import uuid
 import itertools
-import hashlib
 import traceback
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
@@ -43,13 +42,7 @@ TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
 TOKEN_CACHE_TTL = 1200
 
-# ---- PRIORITY 2: human-like interval bounds (replaces fixed START_MATCH_INTERVAL) ----
-START_MATCH_MIN = 3.5
-START_MATCH_MAX = 9.5
-START_MATCH_LONG_MIN = 20.0
-START_MATCH_LONG_MAX = 90.0
-START_MATCH_LONG_CHANCE = 0.08
-
+START_MATCH_INTERVAL = 3.0
 NEW_MATCH_DELAY = 3.0
 MAX_MATCH_DURATION = 700
 MATCH_IDLE_TIMEOUT = 8.0
@@ -62,8 +55,7 @@ FALLBACK_UID = ""
 FALLBACK_PASSWORD = ""
 
 # ============================================================
-# OB55 v2.133.9 SG LEAK — used as fallback defaults
-# Per-account values now override most of these (Priority 1)
+# OB55 v2.133.9 SG LEAK — Used for anti-ban on IND
 # ============================================================
 REGION_LANG = {
     "ME": "ar", "IND": "hi", "ID": "id", "VN": "vi", "TH": "th",
@@ -126,17 +118,9 @@ LEAK_SG = {
     "android_engine_init_flag": 110009,
 }
 
-# ---- PRIORITY 1: real avatar pool so field 76 varies per account ----
-REG_AVATAR_POOL = [2, 7, 12, 1001, 1003, 1004, 1005, 2001, 2002, 102000007]
-
 
 # ==================== DEVICE RANDOMIZER ====================
 def get_device_for_account(account_identifier: str) -> dict:
-    """
-    Returns (and persists) a per-account device fingerprint.
-    PRIORITY 1: enriched with library_path / library_token / extra_info /
-    unknown fields so MajorLogin is structurally unique per account.
-    """
     devices = {}
     if os.path.exists(DEVICES_FILE):
         try:
@@ -150,53 +134,28 @@ def get_device_for_account(account_identifier: str) -> dict:
         return devices[acc_key]
 
     device_list = [
-        ("Samsung", "SM-G998B", "Adreno (TM) 660", "Android OS 12 / API-31", 1440, 3200, 420, 8000),
-        ("Xiaomi",  "2201122G", "Adreno (TM) 730", "Android OS 13 / API-33", 1440, 3200, 440, 12000),
-        ("Realme",  "RMX3700",  "Mali-G710",       "Android OS 14 / API-34", 1080, 2400, 400, 8000),
-        ("OnePlus", "CPH2451",  "Adreno (TM) 740", "Android OS 13 / API-33", 1240, 2772, 450, 12000),
-        ("OPPO",    "CPH2611",  "Adreno (TM) 720", "Android OS 14 / API-34", 1080, 2400, 405, 8000),
-        ("Vivo",    "V2203",    "Mali-G710",       "Android OS 12 / API-31", 1080, 2400, 395, 8000),
-        ("Poco",    "M2102J20SG","Adreno (TM) 660","Android OS 13 / API-33", 1080, 2400, 400, 6000),
+        ("Samsung", "SM-G998B", "Adreno (TM) 660", "Android OS 12 / API-31"),
+        ("Xiaomi", "2201122G", "Adreno (TM) 730", "Android OS 13 / API-33"),
+        ("Realme", "RMX3700", "Mali-G710", "Android OS 14 / API-34"),
+        ("OnePlus", "CPH2451", "Adreno (TM) 740", "Android OS 13 / API-33"),
+        ("OPPO", "CPH2611", "Adreno (TM) 720", "Android OS 14 / API-34"),
+        ("Vivo", "V2203", "Mali-G710", "Android OS 12 / API-31"),
+        ("Poco", "M2102J20SG", "Adreno (TM) 660", "Android OS 13 / API-33"),
     ]
-    brand, model, gpu, os_ver, sw, sh, dpi, mem = random.choice(device_list)
-
-    unique_id = f"Google|{str(uuid.uuid4())}"
-
-    # ---- PRIORITY 1: deterministic per-account derivative fields ----
-    sig = hashlib.md5(unique_id.encode()).hexdigest()[:22]
-    library_path  = f"/data/app/com.dts.freefiremax-{sig}==/lib/arm64"
-    library_token = (
-        f"{hashlib.md5((unique_id + '|lib').encode()).hexdigest()}"
-        f"|/data/app/com.dts.freefiremax-{sig}==/base.apk"
-    )
-    rnd_seed = int(hashlib.md5(unique_id.encode()).hexdigest(), 16)
-
-    # Slight variation of extra_info (still valid base64ish string structure)
-    base_extra = LEAK_SG["extra_info"]
-    extra_info = base_extra if (rnd_seed % 3 == 0) else (
-        base_extra[:-20] + hashlib.md5(unique_id.encode()).hexdigest()[:20]
-    )
+    brand, model, gpu, os_ver = random.choice(device_list)
 
     new_device = {
-        "unique_device_id":  unique_id,
-        "brand":             brand,
-        "model":             model,
-        "gpu_renderer":      gpu,
-        "system_software":   os_ver,
-        "screen_width":      sw,
-        "screen_height":     sh,
-        "screen_dpi":        str(dpi),
-        "memory":            random.randint(2800, mem),
+        "unique_device_id": f"Google|{str(uuid.uuid4())}",
+        "brand": brand,
+        "model": model,
+        "gpu_renderer": gpu,
+        "system_software": os_ver,
+        "screen_width": random.choice([1080, 1440, 720, 1280]),
+        "screen_height": random.choice([2400, 3200, 1600, 2400]),
+        "screen_dpi": str(random.randint(300, 420)),
+        "memory": random.randint(2800, 6500),
         "processor_details": f"ARM64 FP ASIMD AES VMH | {random.randint(2200, 3200)} | {random.randint(6, 12)}",
-        "client_ip":         f"{random.randint(103, 223)}.{random.randint(10, 250)}.{random.randint(10, 250)}.{random.randint(10, 250)}",
-        # ---- PRIORITY 1: extra per-account fields ----
-        "library_path":      library_path,
-        "library_token":     library_token,
-        "extra_info":        extra_info,
-        "reg_avatar":        REG_AVATAR_POOL[rnd_seed % len(REG_AVATAR_POOL)],
-        "unknown_int92":     60000 + (rnd_seed % 20000),
-        "unknown_int104":    80000 + (rnd_seed % 8000),
-        "unknown_str107":    f"1.{hex(rnd_seed % (16**15))[2:].ljust(15, '0')[:15]}",
+        "client_ip": f"{random.randint(103, 223)}.{random.randint(10, 250)}.{random.randint(10, 250)}.{random.randint(10, 250)}"
     }
 
     devices[acc_key] = new_device
@@ -441,6 +400,7 @@ async def _get_total_match_count() -> int:
 
 
 # ==================== TOKEN CACHE ====================
+# ---- FIXED: force-reload support + merge-on-save + external invalidator hook ----
 _token_cache_memo: Dict[str, Any] = {}
 _token_cache_memo_time: float = 0.0
 _TOKEN_CACHE_MEMO_TTL = 5.0
@@ -495,8 +455,13 @@ def _load_token_cache(force: bool = False) -> Dict[str, Any]:
         return {}
 
 def _save_token_cache(cache: Dict[str, Any]):
+    """
+    Merge with on-disk state so external deletions (from PAPAX_server) are not
+    resurrected by our memoized in-memory copy.
+    """
     global _token_cache_memo, _token_cache_memo_time
     try:
+        # Read raw disk state (authoritative for deletions)
         disk = {}
         if os.path.exists(TOKEN_CACHE_FILE):
             try:
@@ -509,16 +474,23 @@ def _save_token_cache(cache: Dict[str, Any]):
             except Exception:
                 disk = {}
 
+        # Start from disk, then overlay our cache.
+        # Rule: any key present in our in-memory cache is kept ONLY if:
+        #   - it exists in disk already, OR
+        #   - it was cached very recently (fresh add this session, < 3s old)
+        # This preserves fresh writes while honoring external deletes.
         merged = dict(disk)
         now = time.time()
         for k, v in cache.items():
             if k in disk:
                 merged[k] = v
             else:
+                # Not on disk: keep only if it's a fresh add (< 3s old)
                 if isinstance(v, dict):
                     cached_at = v.get("cached_at", 0)
                     if now - cached_at < 3.0:
                         merged[k] = v
+                # else drop (was deleted externally)
 
         tmp_file = TOKEN_CACHE_FILE + ".tmp"
         with open(tmp_file, "w", encoding="utf-8") as f:
@@ -547,6 +519,7 @@ def cache_get(uid: str) -> Optional[Dict]:
     return entry
 
 def cache_set(uid: str, account_data: Dict):
+    # ---- FIXED: refuse to cache deleted accounts ----
     try:
         if bot_state.is_deleted(str(uid)):
             print_warning(f"[CACHE] Refusing to cache deleted UID {uid}")
@@ -572,16 +545,24 @@ def cache_invalidate(uid: str):
         _save_token_cache(cache)
         print_warning(f"[CACHE] Invalidated: {uid}")
 
+# ---- FIXED: called from PAPAX_server after external delete. Forces re-read, removes keys, updates memo.
 def cache_invalidate_external(keys: List[str]):
+    """
+    Called by PAPAX_server.full_delete_account after an external delete.
+    Forces a re-read from disk (bypasses memo) and removes matching entries,
+    then writes back and refreshes the memo so subsequent app.py reads are consistent.
+    """
     global _token_cache_memo, _token_cache_memo_time
     try:
         cache = _load_token_cache(force=True)
         keys_set = {str(k) for k in keys if k}
         removed = []
+        # Direct key match
         for k in list(cache.keys()):
             if k in keys_set:
                 del cache[k]
                 removed.append(k)
+        # Value-based match
         for key in list(cache.keys()):
             val = cache.get(key)
             if not isinstance(val, dict):
@@ -737,7 +718,7 @@ def _build_proto_fields(fields: dict) -> bytes:
 
 
 # ============================================================
-# PRIORITY 1: per-account MajorLogin fingerprint
+# IND-SAFE MajorLogin payload — OB55 v2.133.9 SG leak
 # ============================================================
 async def build_majorlogin_payload(open_id, access_token, platform,
                                     client_version, device_info,
@@ -746,48 +727,29 @@ async def build_majorlogin_payload(open_id, access_token, platform,
         effective_region = (region or "IND").upper()
         lang = REGION_LANG.get(effective_region, "en")
 
-        dev = device_info or {}
-        unique_device_id  = dev.get("unique_device_id")  or LEAK_SG["unique_device_id"]
-        client_ip         = dev.get("client_ip")         or LEAK_SG["client_ip"]
-        device_model      = dev.get("model")             or LEAK_SG["device_model"]
-        screen_w          = dev.get("screen_width")      or LEAK_SG["screen_width"]
-        screen_h          = dev.get("screen_height")     or LEAK_SG["screen_height"]
-        screen_dpi        = dev.get("screen_dpi")        or LEAK_SG["screen_dpi"]
-        memory            = dev.get("memory")            or LEAK_SG["memory"]
-        gpu_renderer      = dev.get("gpu_renderer")      or LEAK_SG["gpu_renderer"]
-        system_software   = dev.get("system_software")   or LEAK_SG["system_software"]
-        processor_details = dev.get("processor_details") or LEAK_SG["processor_details"]
-        library_path      = dev.get("library_path")      or LEAK_SG["library_path"]
-        library_token     = dev.get("library_token")     or LEAK_SG["library_token"]
-        extra_info        = dev.get("extra_info")        or LEAK_SG["extra_info"]
-        reg_avatar        = dev.get("reg_avatar")        or LEAK_SG["reg_avatar"]
-        unknown_int92     = dev.get("unknown_int92")     or LEAK_SG["unknown_int92"]
-        unknown_int104    = dev.get("unknown_int104")    or LEAK_SG["unknown_int104"]
-        unknown_str107    = dev.get("unknown_str107")    or LEAK_SG["unknown_str107"]
-
         fields = {
             3:  datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
             4:  "free fire",
             5:  1,
             7:  LEAK_SG["client_version"],
-            8:  system_software,
+            8:  LEAK_SG["system_software"],
             9:  LEAK_SG["system_hardware"],
             10: LEAK_SG["telecom_operator"],
             11: LEAK_SG["network_type"],
-            12: screen_w,
-            13: screen_h,
-            14: str(screen_dpi),
-            15: processor_details,
-            16: memory,
-            17: gpu_renderer,
+            12: LEAK_SG["screen_width"],
+            13: LEAK_SG["screen_height"],
+            14: LEAK_SG["screen_dpi"],
+            15: LEAK_SG["processor_details"],
+            16: LEAK_SG["memory"],
+            17: LEAK_SG["gpu_renderer"],
             18: LEAK_SG["gpu_version"],
-            19: unique_device_id,
-            20: client_ip,
+            19: LEAK_SG["unique_device_id"],
+            20: LEAK_SG["client_ip"],
             21: lang,
             22: str(open_id),
             23: str(platform),
             24: LEAK_SG["device_type"],
-            25: device_model,
+            25: LEAK_SG["device_model"],
             26: effective_region,
             29: str(access_token),
             30: 1,
@@ -803,9 +765,9 @@ async def build_majorlogin_payload(open_id, access_token, platform,
             66: LEAK_SG["ext_sdcard_avail"],
             67: LEAK_SG["ext_sdcard_total"],
             73: LEAK_SG["login_by"],
-            74: library_path,
-            76: reg_avatar,
-            77: library_token,
+            74: LEAK_SG["library_path"],
+            76: LEAK_SG["reg_avatar"],
+            77: LEAK_SG["library_token"],
             78: LEAK_SG["channel_type"],
             79: LEAK_SG["cpu_type"],
             81: LEAK_SG["cpu_architecture"],
@@ -820,24 +782,24 @@ async def build_majorlogin_payload(open_id, access_token, platform,
             fields[90] = "Surat"
             fields[91] = "GJ"
 
-        fields[92]  = unknown_int92
-        fields[93]  = LEAK_SG["release_channel"]
-        fields[94]  = extra_info
-        fields[95]  = LEAK_SG["loading_time"]
-        fields[96]  = LEAK_SG["extra_json"]
-        fields[97]  = LEAK_SG["if_push"]
-        fields[98]  = LEAK_SG["is_vpn"]
-        fields[99]  = "0" if is_activate else str(platform)
+        fields[92] = LEAK_SG["unknown_int92"]
+        fields[93] = LEAK_SG["release_channel"]
+        fields[94] = LEAK_SG["extra_info"]
+        fields[95] = LEAK_SG["loading_time"]
+        fields[96] = LEAK_SG["extra_json"]
+        fields[97] = LEAK_SG["if_push"]
+        fields[98] = LEAK_SG["is_vpn"]
+        fields[99] = "0" if is_activate else str(platform)
         fields[100] = LEAK_SG["origin_platform_type"]
         fields[102] = LEAK_SG["primary_platform_type"]
 
         if is_activate:
             fields[103] = 1
 
-        fields[104] = unknown_int104
+        fields[104] = LEAK_SG["unknown_int104"]
         fields[105] = LEAK_SG["unknown_int105"]
         fields[106] = LEAK_SG["unknown_str106"]
-        fields[107] = unknown_str107
+        fields[107] = LEAK_SG["unknown_str107"]
 
         payload = _build_proto_fields(fields)
         return await aes_encrypt(payload, AES_KEY, AES_IV)
@@ -981,7 +943,7 @@ async def send_keep_alive(region="BD"):
 
 
 # ============================================================
-# START GAME LONE WOLF
+# START GAME LONE WOLF (original, unmodified)
 # ============================================================
 async def start_game_lone_wolf(region, client_version, writer, key, iv):
     packet = bytes.fromhex("080112800a0a010b102b3a110a044944433110aa011a064555524f50453a100a044944433210311a064555524f504540014a0801090a0b1219202758016291090a8001303838463832424630324139363736373032303130313030303030303030303030303136303030313030313530303032323246393745454530463030303030303436373632353134303030303030303030303030303030303030303030303030303030303030303030303030303066663030303030303030636163666131366410241afb02735d5e571400024a775d45414d1a041b1c001f11010449715f4243481a001e1d071c1703004b1a4066785c524570735c51486775421b5c5a4c07504042685a63610816054e19025e75196001477c015165406370195f5547404e4550640103020f1304064863754268676c755f65576e40467e5f0a417a4701026d675d6e73670b1108495a4c6a0b78470b740065645e525a057258425f584a447d4e6759440c11044e7c596d7f4b625f7d04055a47505c4e1d6b5b4107447d7201057d7f0f14084e430457674f7e517d72015172415d027473577c4d615f79535256780911030f4d5e027a797f614165067806505d53777750475e75064257076500460817014e741e7e5078487e7a7c465e7669767153497064605a7376677773550d160148037e18675966787f4c42607a645f577e7b441b460776026b18685d0b110205490060020f70676175654674706671797f41067346677c4e06585e780f15074c57047b40517075415f6364027259674b5b0166407f7340600407770a22047a5d5c52300b3a0a167305067162727516134208312e3133302e3232480350015ae90403626253513635686e556f4e36416456324b796f566c636f477776484f624e56526c4d727073504b4f43654177616848494176795556497273743752737149734a7a786b3247525268377a2f637664626d504f6a73552f79626d38547a4c69586d2f474351696d494b53486833447955726f39515152756c34545350626d6d624b7949565937545671577059455372323646572f59624578507338514f706d317372785455736c30796a434144444d4f34616a654b615753366361496c554b4963797a494e396d52516f715277687939797257476d337a644345337a6a61436f492f5a585233656f65365a42647a64677654636b6b665733356e4d4c6a6a565072564b6433523172756174394e50514150724a5546627859696c4c5a3859707336654d5447666b6649793574666a526c314d4648706b51774c6373374439656378566c41636f374e664f6d2b30654756466c4434744478706771385533595973587645384842502f70666c767a737138316a32524f4d7857437556445442492f684735625462773166456e4249725162762b636144775147696f74554e316d4c4b77734379456f4766706746614251457645672b736a764c4c78704743334c304a5344532f74526169504354553344374e6249306547516651622f5a466f4c36455630775a324d6f583932414c572f5049752f56634663584e70596b356f7966326151416a536971486a2f363276354843644f525551303578754e6171795251625653704654303137655237675255636b4966366c6f447476342b514e4a4670766d74757077707774396a5a5974437a4b56743657726d6e36785837706658456251555434684f3758a201050803108703a201050804108103a20105080510c001a20105081d10cc01a2010408161078a20105080e10af01a201020815")
@@ -1251,7 +1213,6 @@ async def reply_for(frame, key, mask, ack_key=0x68, ping_key=0x6D, hello_key=0x5
     return typ, None
 
 async def keepalive_ping(sock, ip, port, key_bytes, mask, stop_event):
-    # ---- PRIORITY 5: jittered keepalive interval ----
     nr = (await layouts_from_mask(mask))[1]
     ping_keys = [0x66, 0x6D, 0x69, 0x6C, 0x6B, 0x6E, 0x6F, 0x70]
     loop = asyncio.get_event_loop()
@@ -1266,7 +1227,7 @@ async def keepalive_ping(sock, ip, port, key_bytes, mask, stop_event):
             pass
         i += 1
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=random.uniform(2.5, 4.0))
+            await asyncio.wait_for(stop_event.wait(), timeout=3.0)
         except asyncio.TimeoutError:
             pass
 
@@ -1335,7 +1296,7 @@ async def decode_packet(packet, key, mask=None):
 
 
 # ============================================================
-# play_game — UDP MATCH (Priority 5: jittered sends)
+# play_game — UDP MATCH
 # ============================================================
 async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                     account_id, player_region, client_version, key, iv,
@@ -1387,14 +1348,13 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                 try:
                     await loop.sock_sendto(sock, bytes.fromhex(thunder), (resolved_ip, port))
                     thunder_sent = True
-                    # ---- PRIORITY 5: human jitter between handshake packets ----
-                    await asyncio.sleep(random.uniform(0.08, 0.18))
+                    await asyncio.sleep(0.1)
                     prepare_ack = await build_packet(
                         0x68, (await layouts_from_mask(match_code))[1],
                         0, 2, None, 1, b"\x01\x00", udp_key_bytes
                     )
                     await loop.sock_sendto(sock, prepare_ack, (resolved_ip, port))
-                    await asyncio.sleep(random.uniform(0.15, 0.35))
+                    await asyncio.sleep(0.2)
                     await loop.sock_sendto(sock, bytes.fromhex(sharma), (resolved_ip, port))
                     sharma_sent = True
                     ack_state = "thunder_sharma_sent"
@@ -1524,9 +1484,7 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
 
 
 # ============================================================
-# functional_lone_wolf
-# PRIORITY 2: human-like match interval
-# PRIORITY 4: use account's real region for match
+# functional_lone_wolf — matches always enabled
 # ============================================================
 async def functional_lone_wolf(addrs, starter_packet, account_region, client_version,
                                 key, iv, account_id="", account_data=None,
@@ -1544,9 +1502,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
     current_key = key
     current_iv = iv
     current_account_data = account_data
-
-    # ---- PRIORITY 2: per-session human-like schedule ----
-    next_interval = random.uniform(START_MATCH_MIN, START_MATCH_MAX)
 
     try:
         while True:
@@ -1609,11 +1564,10 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 async def send_start_match():
                     nonlocal search_attempts, last_start_time
                     search_attempts += 1
-                    # ---- PRIORITY 4: use account's real region ----
-                    current_region = (account_region or "IND").upper()
+                    current_region = "BD"
                     print_info(f"[LONE WOLF] Sending StartMatch #{search_attempts} region: {current_region}")
                     try:
-                        await asyncio.sleep(random.uniform(0.3, 0.9))
+                        await asyncio.sleep(random.uniform(0.3, 0.6))
                         await start_game_lone_wolf(
                             current_region, client_version, writer,
                             current_key, current_iv
@@ -1644,17 +1598,8 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         pass
 
                     now = asyncio.get_running_loop().time()
-                    # ---- PRIORITY 2: human-like schedule with occasional long pause ----
-                    if now - last_start_time >= next_interval:
+                    if now - last_start_time >= START_MATCH_INTERVAL:
                         await send_start_match()
-                        if random.random() < START_MATCH_LONG_CHANCE:
-                            next_interval = random.uniform(START_MATCH_LONG_MIN, START_MATCH_LONG_MAX)
-                            print_info(
-                                f"[SCHEDULE] {uid_str} taking long pause "
-                                f"({next_interval:.1f}s) before next StartMatch"
-                            )
-                        else:
-                            next_interval = random.uniform(START_MATCH_MIN, START_MATCH_MAX)
 
                     try:
                         data = await asyncio.wait_for(reader.read(8192), timeout=0.5)
@@ -1713,7 +1658,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 thunder, sharma = await build_match_startup_packets(
                                     token, udp_key, match_code, effective_acc_id, block_val or 0,
                                     server_ip=server_ip_port,
-                                    region=account_region,  # ---- PRIORITY 4 ----
+                                    region=account_region,
                                     client_version=client_version,
                                     access_token=acc_tok
                                 )
@@ -1737,7 +1682,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                         udp_key,
                                         match_code,
                                         effective_acc_id,
-                                        account_region,  # ---- PRIORITY 4 ----
+                                        "BD",
                                         client_version,
                                         current_key,
                                         current_iv,
@@ -1877,8 +1822,7 @@ async def informational(addrs, starter_packet, key, iv, region="BD", max_reconne
             async def info_keepalive():
                 ka_bytes = await send_keep_alive(region)
                 while True:
-                    # ---- PRIORITY 5: jittered keepalive ----
-                    await asyncio.sleep(random.uniform(4.0, 6.5))
+                    await asyncio.sleep(5)
                     try:
                         if writer and not writer.is_closing():
                             writer.write(ka_bytes)
@@ -1916,6 +1860,7 @@ async def informational(addrs, starter_packet, key, iv, region="BD", max_reconne
 
 # ==================== ACCOUNT PROCESSORS ====================
 def _register_credentials(account_data: Dict):
+    # ---- FIXED: also populate identity_map so full_delete can expand identifiers ----
     try:
         acc_id = str(account_data['account_id'])
         bot_state.account_credentials[acc_id] = account_data
@@ -1964,8 +1909,7 @@ async def refresh_account_profile(account_data_or_uid: Any):
 
 
 # ============================================================
-# process_account_uid_pass
-# PRIORITY 4: use real region from MajorLogin, not hardcoded
+# process_account_uid_pass — DEBUG VERSION
 # ============================================================
 async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
     cached = cache_get(uid)
@@ -2002,12 +1946,9 @@ async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
         print_success(f"[DEBUG] Token OK: open_id={open_id} platform={platform}")
 
         device_info = get_device_for_account(uid)
-        print_success(
-            f"[DEBUG] Device: {device_info.get('brand')} {device_info.get('model')} "
-            f"| fp={device_info.get('unique_device_id', '')[:24]}..."
-        )
+        print_success(f"[DEBUG] Device: {device_info.get('brand')} {device_info.get('model')}")
 
-        print_info("[DEBUG] Step 3: Building MajorLogin payload (per-account fingerprint)...")
+        print_info("[DEBUG] Step 3: Building MajorLogin payload (OB55 SG leak)...")
         login_payload_data = await build_majorlogin_payload(
             open_id, access_token, platform, client_version, device_info,
             region="IND", is_activate=False
@@ -2040,10 +1981,10 @@ async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
         exp = int(get_proto_field(dict_res, 7, 0))
         likes = int(get_proto_field(dict_res, 8, 0))
         nickname = res_proto.nickname or get_proto_field(dict_res, 4, f"Player_{acc_id}")
-        # ---- PRIORITY 4: use whatever the server actually told us ----
-        region = (majorlogin_response.region or get_proto_field(dict_res, 3, "IND") or "IND").upper()
+        region = majorlogin_response.region or get_proto_field(dict_res, 3, "BD")
         print_success(f"[DEBUG] Profile: {nickname} level={level} exp={exp} region={region}")
 
+        # ---- FIXED: kill-switch check before register/cache ----
         if bot_state.is_deleted(uid) or bot_state.is_deleted(acc_id):
             print_warning(f"[LOGIN] UID {uid} was deleted during login → discarding")
             return None
@@ -2147,8 +2088,9 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
         exp = int(get_proto_field(dict_res, 7, 0))
         likes = int(get_proto_field(dict_res, 8, 0))
         nickname = res_proto.nickname or get_proto_field(dict_res, 4, f"Player_{acc_id}")
-        region = (majorlogin_response.region or get_proto_field(dict_res, 3, "IND") or "IND").upper()
+        region = majorlogin_response.region or get_proto_field(dict_res, 3, "BD")
 
+        # ---- FIXED: kill-switch check before register/cache ----
         if bot_state.is_deleted(cache_key) or bot_state.is_deleted(acc_id):
             print_warning(f"[LOGIN] Token {access_token[:10]}... was deleted during login → discarding")
             return None
@@ -2305,17 +2247,16 @@ def load_accounts():
 async def main():
     print_colored("=" * 60, Colors.CYAN)
     print_colored("    TEAM 84FF - FreeFire Level Up Bot (Web Dashboard)", Colors.GREEN)
-    print_colored("   Per-Account Fingerprint + Human Timing + Smart DNS", Colors.WHITE)
+    print_colored("   Persistent Device ID + TRUE Parallel + Smart DNS", Colors.WHITE)
     print_colored("=" * 60, Colors.CYAN)
-    print_info(f"StartMatch interval: {START_MATCH_MIN}–{START_MATCH_MAX}s "
-               f"(long pause {START_MATCH_LONG_MIN}–{START_MATCH_LONG_MAX}s @ {int(START_MATCH_LONG_CHANCE*100)}%)")
+    print_info(f"Start Match Interval: {START_MATCH_INTERVAL}s")
     print_info(f"Offline Wait: {NEW_MATCH_DELAY}s")
     print_info(f"Non-match Reconnect: {NON_MATCH_RECONNECT_DELAY}s")
     print_info(f"Cache Invalidation Threshold: {MAX_CONSECUTIVE_PARSE_FAILURES}x")
     print_info(f"Parallel Matches: UNLIMITED")
     print_info(f"Cache TTL: {TOKEN_CACHE_TTL}s")
-    print_info("Device System: 1 ID = 1 Unique Fingerprint (library_path/token/avatar)")
-    print_info("Login Payload: OB55 v2.133.9 SG LEAK (per-account fingerprint)")
+    print_info("Device System: 1 ID = 1 Persistent Device ID")
+    print_info("Login Payload: OB55 v2.133.9 SG LEAK (IND-SAFE)")
     print_colored("=" * 60, Colors.CYAN)
 
     try:
@@ -2324,6 +2265,7 @@ async def main():
     except Exception as e:
         print_error(f"Could not start web dashboard: {e}")
 
+    # ---- FIXED: wire external cache invalidation hook into PAPAX_server ----
     try:
         import PAPAX_server as _px
         _px.EXTERNAL_CACHE_INVALIDATOR = cache_invalidate_external
